@@ -10,18 +10,31 @@
 #include <TFTv2.h>
 
 #define BPM_SENSOR_PIN PIN_A0
-#define TFT_CS 15 // ESP8266 GPIO NUMBER
-#define TFT_RST 0 // ESP8266 GPIO NUMBER
-#define TFT_DC 2  // ESP8266 GPIO NUMBER
+#define TFT_CS 15            // ESP8266 GPIO NUMBER
+#define TFT_RST 0            // ESP8266 GPIO NUMBER
+#define TFT_DC 2             // ESP8266 GPIO NUMBER
+#define ACCEL_BUFFER_SIZE 10 // circular buffer size. used for filtering
 
 #define BPM_HIGH_PULSE_READING 600
 
 ////////////////////////////// Global variables //////////////////////////////
 
-// TFT variables
+/////////// accelerometer variables
+Adafruit_ADXL345_Unified accel(12345); // The number 12345 is actually just a placeholder value used to initialize the ADXL345 sensor object.
+
+// circular buffer methodology (search this term if something is unclear)
+float accel_buffer[ACCEL_BUFFER_SIZE];
+int accel_next_index = 0;
+int accel_oldest_index = 0;
+
+/** @note
+ * I need to implement the circular buffer method on the heart rate monitor
+ */
+
+///////////  TFT variables
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 
-// wifi variables
+///////////  wifi variables
 const char *ssid = "liornet_WR";
 const char *password = "0544988409";
 
@@ -35,6 +48,13 @@ unsigned long int last_peak_time = false;
 ////////////////////////////// Function prototypes //////////////////////////////
 bool calculate_heart_rate(int, int, int);
 void TFT_setup(void);
+bool accel_setup(void);
+bool setup_wifi_connection(void);
+float accel_get_acceleration_norm(void);
+void accel_buffer_add_data(float);
+float accel_buffer_get_oldest_data(void);
+
+////////////////////////////// Setup & Loop functions //////////////////////////////
 
 void setup()
 {
@@ -42,6 +62,7 @@ void setup()
   pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(9600);
   TFT_setup();
+  accel_setup();
 }
 
 void loop()
@@ -52,6 +73,7 @@ void loop()
   // put your main code here, to run repeatedly:
 }
 
+////////////////////////////// Functions //////////////////////////////
 bool calculate_heart_rate(int signal_pin, int max_heart_rate, int min_heart_rate)
 {
   int sensor_value = analogRead(signal_pin);
@@ -91,11 +113,12 @@ bool calculate_heart_rate(int signal_pin, int max_heart_rate, int min_heart_rate
   return success;
 }
 
-void setup_wifi_connection(void)
+inline bool setup_wifi_connection(void)
 {
+  return true;
 }
 
-void TFT_setup(void)
+inline void TFT_setup(void)
 {
   tft.initR(INITR_GREENTAB);
   tft.fillScreen(ST77XX_BLACK);
@@ -108,4 +131,36 @@ void TFT_setup(void)
   tft.setTextColor(ST7735_CYAN);
   tft.setTextSize(3);
   tft.println("Hello !");
+}
+
+inline bool accel_setup()
+{
+  return accel.begin();
+}
+
+float accel_get_acceleration_norm()
+{
+  // get accelerometer data
+  sensors_event_t event;
+  accel.getEvent(&event);
+
+  // calculate and return acceleration vector norm
+  return sqrt(pow(event.acceleration.x, 2) + pow(event.acceleration.y, 2) + pow(event.acceleration.z, 2));
+}
+
+void accel_buffer_add_data(float newData)
+{
+  accel_buffer[accel_next_index] = newData;
+  accel_next_index = (accel_next_index + 1) % ACCEL_BUFFER_SIZE;
+  if (accel_next_index == accel_oldest_index)
+  {
+    accel_oldest_index = (accel_oldest_index + 1) % ACCEL_BUFFER_SIZE;
+  }
+}
+
+float accel_buffer_get_oldest_data()
+{
+  float oldestData = accel_buffer[accel_oldest_index];
+  accel_oldest_index = (accel_oldest_index + 1) % ACCEL_BUFFER_SIZE;
+  return oldestData;
 }
