@@ -5,8 +5,7 @@
 #include <Adafruit_ST7735.h>
 #include <SPI.h>
 #include <ESP8266WiFi.h>
-#include <WiFiClientSecure.h>
-#include <ESP8266Ping.h>
+#include <Callmebot_ESP8266.h>
 #include <TFTv2.h>
 #include <SoftwareSerial.h>
 
@@ -22,6 +21,7 @@
 
 ////////////////////////////// Global variables //////////////////////////////
 
+/////////// Neo-6M gps variables
 SoftwareSerial gpsSerial(GPS_SERIAL_RX, GPS_SERIAL_TX);
 
 /////////// accelerometer variables
@@ -38,18 +38,15 @@ int accel_oldest_index = 0;
 
 ///////////  TFT variables
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
-sensors_event_t accel_event[2];
+// sensors_event_t accel_event[2];
 
 ///////////  wifi variables
-const char *ssid = "liornet";
+const char *ssid = "liornet_WR_2.4_Ghz";
 const char *password = "0544988409";
-const char *host = "api.callmebot.com";
-const int httpsPort = 443;
-const String api_key = "7335050";
-const String phone = "+972528854006";
-const String message = "Hello from CallMeBot!";
-
-String server_name = "https://api.callmebot.com/whatsapp.php?phone=0528854006&text=Here%27s%20the%20location%20you%20requested:%20https://www.google.com/maps/search/?api=1%26query=32.166206415848514,34.89679626029493&apikey=7335050";
+// callmebot variables
+String phoneNumber = "+972528854006";
+String apiKey = "7335050";
+String messsage = "Here's the location you requested: https://www.google.com/maps/search/?api=1&query=32.166206415848514,34.89679626029493";
 
 // heart rate sensor variables
 bool peak_detected = false;
@@ -65,8 +62,6 @@ float accel_get_acceleration_norm(void);
 void accel_buffer_add_data(float);
 float accel_buffer_get_oldest_data(void);
 void accel_test_loop(void);
-void send_whatsapp_message();
-void sendPing();
 void gps_setup();
 void get_gps_raw();
 
@@ -77,18 +72,20 @@ void setup()
   // put your setup code here, to run once:
   pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(9600);
-  // TFT_setup();
-  // accel_setup();
-  // wifi_setup();
-  // send_whatsapp_message();
-  gps_setup();
+  TFT_setup();
+  accel_setup();
+  wifi_setup();
+  delay(1000);
+  whatsappMessage(phoneNumber, apiKey, messsage);
 }
 
 void loop()
 {
-  // accel_test_loop();
-  get_gps_raw();
-  // Serial.println(analogRead(PIN_A0));
+  accel_test_loop();
+  // get_gps_raw();
+  Serial.println(analogRead(PIN_A0));
+  whatsappMessage(phoneNumber, apiKey, messsage);
+  delay(5000);
   // Serial.println("\t");
   // calculate_heart_rate(BPM_SENSOR_PIN, 180, 50);
   // put your main code here, to run repeatedly:
@@ -149,12 +146,12 @@ inline bool wifi_setup(void)
   }
   Serial.println("");
   Serial.println("WiFi connected ");
-  Serial.print("IP address: ");
+  Serial.print("Connected to WiFi network with IP address: ");
   Serial.println(WiFi.localIP());
 
   Serial.println();
 
-  sendPing();
+  whatsappMessage(phoneNumber, apiKey, messsage);
 
   return true;
 }
@@ -248,59 +245,6 @@ inline void accel_test_loop()
    * */
 
   delay(10);
-}
-
-void send_whatsapp_message()
-{
-  WiFiClientSecure client;
-  Serial.print("Connecting to ");
-  Serial.println(host);
-  if (!client.connect(host, httpsPort))
-  {
-    Serial.println("Connection failed");
-    return;
-  }
-
-  String url = "/whatsapp.php?phone=" + phone + "&text=" + message + "&apikey=" + api_key;
-  Serial.print("Requesting URL: ");
-  Serial.println(url);
-
-  client.print(String("GET ") + url + " HTTP/1.1\r\n" +
-               "Host: " + host + "\r\n" +
-               "User-Agent: ESP8266\r\n" +
-               "Connection: close\r\n\r\n");
-
-  Serial.println("Request sent");
-
-  while (client.connected())
-  {
-    String line = client.readStringUntil('\n');
-    if (line == "\r")
-    {
-      Serial.println("Headers received");
-      break;
-    }
-  }
-
-  Serial.println("Response received");
-  String response = client.readStringUntil('\n');
-  Serial.println(response);
-
-  Serial.println("Closing connection");
-}
-
-void sendPing()
-{
-  Serial.println("Pinging google to check connection");
-  if (Ping.ping("www.google.com", 5))
-  {
-    Serial.println("Website is reachable");
-    Serial.println("average ping time: " + String(Ping.averageTime()) + " [ms]");
-  }
-  else
-  {
-    Serial.println("Website is not reachable");
-  }
 }
 
 void gps_setup()
