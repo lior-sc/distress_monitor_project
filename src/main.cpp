@@ -17,8 +17,8 @@
 #define ACCEL_BUFFER_SIZE 10 // circular buffer size. used for filtering
 #define BPM_HIGH_PULSE_READING 600
 
-#define GPS_SERIAL_RX 4
-#define GPS_SERIAL_TX 5
+#define GPS_SERIAL_RX 0
+#define GPS_SERIAL_TX 16
 
 ////////////////////////////// Global variables //////////////////////////////
 
