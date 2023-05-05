@@ -5,16 +5,15 @@
 #include <Adafruit_ST7735.h>
 #include <SPI.h>
 #include <ESP8266WiFi.h>
-#include <ESP8266HTTPClient.h>
-#include <WiFiClient.h>
+#include <WiFiClientSecure.h>
 #include <TFTv2.h>
+#include <SoftwareSerial.h>
 
 #define BPM_SENSOR_PIN PIN_A0
 #define TFT_CS 15            // ESP8266 GPIO NUMBER
 #define TFT_RST 0            // ESP8266 GPIO NUMBER
 #define TFT_DC 2             // ESP8266 GPIO NUMBER
 #define ACCEL_BUFFER_SIZE 10 // circular buffer size. used for filtering
-
 #define BPM_HIGH_PULSE_READING 600
 
 ////////////////////////////// Global variables //////////////////////////////
@@ -33,6 +32,7 @@ int accel_oldest_index = 0;
 
 ///////////  TFT variables
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
+sensors_event_t accel_event[2];
 
 ///////////  wifi variables
 const char *ssid = "liornet_WR";
@@ -53,6 +53,7 @@ bool setup_wifi_connection(void);
 float accel_get_acceleration_norm(void);
 void accel_buffer_add_data(float);
 float accel_buffer_get_oldest_data(void);
+void accel_test_loop(void);
 
 ////////////////////////////// Setup & Loop functions //////////////////////////////
 
@@ -67,6 +68,7 @@ void setup()
 
 void loop()
 {
+  accel_test_loop();
   // Serial.println(analogRead(PIN_A0));
   // Serial.println("\t");
   // calculate_heart_rate(BPM_SENSOR_PIN, 180, 50);
@@ -123,6 +125,7 @@ inline void TFT_setup(void)
   tft.initR(INITR_GREENTAB);
   tft.fillScreen(ST77XX_BLACK);
 
+  tft.setRotation(1);
   tft.setCursor(0, 0);
   tft.setTextColor(ST7735_GREEN);
   tft.setTextWrap(true);
@@ -131,11 +134,28 @@ inline void TFT_setup(void)
   tft.setTextColor(ST7735_CYAN);
   tft.setTextSize(3);
   tft.println("Hello !");
+  delay(1000);
+  tft.fillScreen(ST77XX_BLACK);
 }
 
 inline bool accel_setup()
 {
-  return accel.begin();
+  // begin accelerometer operation
+  bool success = accel.begin();
+  // set range to +-16g (+-156.9 m/s)
+  accel.setRange(ADXL345_RANGE_16_G);
+  // get and print sensor data on serial
+  sensor_t sensor_data;
+  accel.getSensor(&sensor_data);
+  Serial.println("\n////////////////////// adxl345 sensor data //////////////////////");
+  Serial.println("Sensor id: " + String(sensor_data.sensor_id));
+  Serial.println("Resolution: " + String(sensor_data.resolution));
+  Serial.println("max_value: " + String(sensor_data.max_value) + " [m/s^2]");
+  Serial.println("min_value: " + String(sensor_data.min_value) + " [m/s^2]");
+  // set delay to see the daya should any other information arrive
+  delay(1000);
+  // return the success of the accel.begin method
+  return success;
 }
 
 float accel_get_acceleration_norm()
@@ -163,4 +183,30 @@ float accel_buffer_get_oldest_data()
   float oldestData = accel_buffer[accel_oldest_index];
   accel_oldest_index = (accel_oldest_index + 1) % ACCEL_BUFFER_SIZE;
   return oldestData;
+}
+
+inline void accel_test_loop()
+{
+  // get adxl345 reading
+  sensors_event_t event;
+  accel.getEvent(&event);
+
+  // set TFT text configurations and clear existing text
+  tft.setCursor(0, 0);
+  tft.setTextColor(ST7735_MAGENTA);
+  tft.setTextWrap(true);
+  tft.setTextSize(2);
+  tft.fillRect(36, 0, 100, 52, ST7735_BLACK);
+  // print acceleration values
+  tft.println("x: " + String(event.acceleration.x));
+  tft.println("y: " + String(event.acceleration.y));
+  tft.println("z: " + String(event.acceleration.z));
+  tft.print("");
+
+  /** @note
+   * in order to avoid screen blinking we need to rewrite the number only if it is changed.
+   * we need to do a comparison
+   * */
+
+  delay(10);
 }
