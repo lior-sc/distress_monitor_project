@@ -17,7 +17,12 @@
 #define ACCEL_BUFFER_SIZE 10 // circular buffer size. used for filtering
 #define BPM_HIGH_PULSE_READING 600
 
+#define GPS_SERIAL_RX 4
+#define GPS_SERIAL_TX 5
+
 ////////////////////////////// Global variables //////////////////////////////
+
+SoftwareSerial gpsSerial(GPS_SERIAL_RX, GPS_SERIAL_TX);
 
 /////////// accelerometer variables
 Adafruit_ADXL345_Unified accel(12345); // The number 12345 is actually just a placeholder value used to initialize the ADXL345 sensor object.
@@ -36,7 +41,7 @@ Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 sensors_event_t accel_event[2];
 
 ///////////  wifi variables
-const char *ssid = "liornet_WR_2.4_Ghz";
+const char *ssid = "liornet";
 const char *password = "0544988409";
 const char *host = "api.callmebot.com";
 const int httpsPort = 443;
@@ -62,6 +67,8 @@ float accel_buffer_get_oldest_data(void);
 void accel_test_loop(void);
 void send_whatsapp_message();
 void sendPing();
+void gps_setup();
+void get_gps_raw();
 
 ////////////////////////////// Setup & Loop functions //////////////////////////////
 
@@ -70,15 +77,17 @@ void setup()
   // put your setup code here, to run once:
   pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(9600);
-  TFT_setup();
-  accel_setup();
-  wifi_setup();
-  send_whatsapp_message();
+  // TFT_setup();
+  // accel_setup();
+  // wifi_setup();
+  // send_whatsapp_message();
+  gps_setup();
 }
 
 void loop()
 {
-  accel_test_loop();
+  // accel_test_loop();
+  get_gps_raw();
   // Serial.println(analogRead(PIN_A0));
   // Serial.println("\t");
   // calculate_heart_rate(BPM_SENSOR_PIN, 180, 50);
@@ -292,4 +301,36 @@ void sendPing()
   {
     Serial.println("Website is not reachable");
   }
+}
+
+void gps_setup()
+{
+  Serial.println("////////////////////// NEO-6M GPS setup //////////////////////");
+  Serial.println("Initiate softwareSerial on pins " + String(GPS_SERIAL_RX) + " (RX)  and pin" + String(GPS_SERIAL_TX) + " (TX)");
+  gpsSerial.begin(9600);
+  delay(1000);
+  while (gpsSerial.available())
+  {
+    Serial.print(gpsSerial.read());
+    delay(1);
+  }
+
+  Serial.println("\n\nFinished GPS setup");
+}
+
+void get_gps_raw()
+{
+  if (!gpsSerial.available())
+  {
+    return;
+  }
+  Serial.println();
+
+  while (gpsSerial.available())
+  {
+    Serial.print(gpsSerial.read());
+    delay(1);
+  }
+
+  Serial.println("\n");
 }
