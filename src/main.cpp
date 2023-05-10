@@ -62,8 +62,10 @@ float accel_get_acceleration_norm(void);
 void accel_buffer_add_data(float);
 float accel_buffer_get_oldest_data(void);
 void accel_test_loop(void);
+inline void accel_test_loop_serial();
 void gps_setup();
 void get_gps_raw();
+void heart_rate_test_loop();
 
 ////////////////////////////// Setup & Loop functions //////////////////////////////
 
@@ -76,19 +78,16 @@ void setup()
   accel_setup();
   wifi_setup();
   delay(1000);
-  whatsappMessage(phoneNumber, apiKey, messsage);
+  // whatsappMessage(phoneNumber, apiKey, messsage);
 }
 
 void loop()
 {
-  accel_test_loop();
-  // get_gps_raw();
-  Serial.println(analogRead(PIN_A0));
-  whatsappMessage(phoneNumber, apiKey, messsage);
-  delay(5000);
-  // Serial.println("\t");
-  // calculate_heart_rate(BPM_SENSOR_PIN, 180, 50);
-  // put your main code here, to run repeatedly:
+  // accel_test_loop();
+  // accel_test_loop_serial();
+  get_gps_raw();
+
+  // whatsappMessage(phoneNumber, apiKey, messsage);
 }
 
 ////////////////////////////// Functions //////////////////////////////
@@ -148,10 +147,7 @@ inline bool wifi_setup(void)
   Serial.println("WiFi connected ");
   Serial.print("Connected to WiFi network with IP address: ");
   Serial.println(WiFi.localIP());
-
   Serial.println();
-
-  whatsappMessage(phoneNumber, apiKey, messsage);
 
   return true;
 }
@@ -247,6 +243,25 @@ inline void accel_test_loop()
   delay(10);
 }
 
+inline void accel_test_loop_serial()
+{
+  // get adxl345 reading
+  sensors_event_t event;
+  accel.getEvent(&event);
+
+  // print acceleration values
+  Serial.print("x: " + String(event.acceleration.x) + "  ");
+  Serial.print("y: " + String(event.acceleration.y) + "  ");
+  Serial.println("z: " + String(event.acceleration.z) + "  ");
+
+  /** @note
+   * in order to avoid screen blinking we need to rewrite the number only if it is changed.
+   * we need to do a comparison
+   * */
+
+  delay(10);
+}
+
 void gps_setup()
 {
   Serial.println("////////////////////// NEO-6M GPS setup //////////////////////");
@@ -277,4 +292,9 @@ void get_gps_raw()
   }
 
   Serial.println("\n");
+}
+
+void heart_rate_test_loop()
+{
+  Serial.println(analogRead(PIN_A0));
 }
