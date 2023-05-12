@@ -6,8 +6,8 @@
 #include <SPI.h>
 #include <ESP8266WiFi.h>
 #include <Callmebot_ESP8266.h>
-#include <TFTv2.h>
 #include <SoftwareSerial.h>
+#include <TinyGPS++.h>
 
 #define BPM_SENSOR_PIN PIN_A0
 #define TFT_CS 15            // ESP8266 GPIO NUMBER
@@ -23,6 +23,9 @@
 
 /////////// Neo-6M gps variables
 SoftwareSerial gpsSerial(GPS_SERIAL_RX, GPS_SERIAL_TX);
+TinyGPSPlus gps;
+double lattitude = 0;
+double longitude = 0;
 
 /////////// accelerometer variables
 Adafruit_ADXL345_Unified accel(12345); // The number 12345 is actually just a placeholder value used to initialize the ADXL345 sensor object.
@@ -43,6 +46,7 @@ Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 ///////////  wifi variables
 const char *ssid = "liornet_WR_2.4_Ghz";
 const char *password = "0544988409";
+
 // callmebot variables
 String phoneNumber = "+972528854006";
 String apiKey = "7335050";
@@ -66,17 +70,20 @@ inline void accel_test_loop_serial();
 void gps_setup();
 void get_gps_raw();
 void heart_rate_test_loop();
+bool get_gps_lat_long();
 
 ////////////////////////////// Setup & Loop functions //////////////////////////////
 
 void setup()
 {
   // put your setup code here, to run once:
-  pinMode(LED_BUILTIN, OUTPUT);
+  // pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(9600);
   TFT_setup();
-  accel_setup();
-  wifi_setup();
+  // accel_setup();
+  // wifi_setup();
+  Serial.println("setup gps");
+  gps_setup();
   delay(1000);
   // whatsappMessage(phoneNumber, apiKey, messsage);
 }
@@ -85,7 +92,25 @@ void loop()
 {
   // accel_test_loop();
   // accel_test_loop_serial();
-  get_gps_raw();
+  // get_gps_raw();
+  while (!get_gps_lat_long())
+  {
+    // do nothing
+  }
+  tft.fillScreen(ST7735_BLACK);
+  tft.setTextSize(1);
+  tft.setCursor(0, 0);
+  tft.setTextColor(ST7735_MAGENTA);
+  tft.printf("lat: %.13f \n", lattitude);
+  tft.setTextColor(ST7735_ORANGE);
+  tft.printf("long: %.13f \n", longitude);
+
+  Serial.print("lat:  ");
+  Serial.printf("lat: %.16f  long: %.16f \n", lattitude, longitude);
+  delay(1000);
+
+  // delay(250);
+  // Serial.println("waiting for data");
 
   // whatsappMessage(phoneNumber, apiKey, messsage);
 }
@@ -166,8 +191,10 @@ inline void TFT_setup(void)
   tft.setTextColor(ST7735_CYAN);
   tft.setTextSize(3);
   tft.println("Hello !");
-  delay(1000);
-  tft.fillScreen(ST77XX_BLACK);
+  tft.setTextColor(ST7735_ORANGE);
+  tft.setTextSize(4);
+  tft.println("Hello!!");
+  delay(100);
 }
 
 inline bool accel_setup()
@@ -282,16 +309,46 @@ void get_gps_raw()
   if (!gpsSerial.available())
   {
     return;
+    // Serial.println("no gps data. waiting");
+    // delay(10);
   }
   Serial.println();
 
   while (gpsSerial.available())
   {
     Serial.print(gpsSerial.read());
-    delay(1);
+    delay(2);
   }
 
   Serial.println("\n");
+}
+
+bool get_gps_lat_long()
+{
+  bool success = false;
+  if (gpsSerial.available() > 0)
+  {
+    while (gpsSerial.available() > 0)
+    {
+      char temp = (char)gpsSerial.read();
+      gps.encode(temp);
+      // Serial.print(temp);
+      delay(2);
+    }
+  }
+
+  // Serial.println("gps serial available");
+
+  // Serial.println("gps encode");
+  if (gps.location.isValid())
+  {
+    // Serial.println("gps valid");
+    lattitude = gps.location.lat();
+    longitude = gps.location.lng();
+
+    success = true;
+  }
+  return success;
 }
 
 void heart_rate_test_loop()
