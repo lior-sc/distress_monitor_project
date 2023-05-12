@@ -44,8 +44,8 @@ Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 // sensors_event_t accel_event[2];
 
 ///////////  wifi variables
-const char *ssid = "liornet_WR_2.4_Ghz";
-const char *password = "0544988409";
+const char *ssid = "Galaxy A53 5G 4C72";
+const char *password = "otkm7250";
 
 // callmebot variables
 String phoneNumber = "+972528854006";
@@ -71,6 +71,7 @@ void gps_setup();
 void get_gps_raw();
 void heart_rate_test_loop();
 bool get_gps_lat_long();
+void send_location_msg();
 
 ////////////////////////////// Setup & Loop functions //////////////////////////////
 
@@ -80,8 +81,8 @@ void setup()
   // pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(9600);
   TFT_setup();
-  // accel_setup();
-  // wifi_setup();
+  accel_setup();
+  wifi_setup();
   Serial.println("setup gps");
   gps_setup();
   delay(1000);
@@ -93,24 +94,9 @@ void loop()
   // accel_test_loop();
   // accel_test_loop_serial();
   // get_gps_raw();
-  while (!get_gps_lat_long())
-  {
-    // do nothing
-  }
-  tft.fillScreen(ST7735_BLACK);
-  tft.setTextSize(1);
-  tft.setCursor(0, 0);
-  tft.setTextColor(ST7735_MAGENTA);
-  tft.printf("lat: %.13f \n", lattitude);
-  tft.setTextColor(ST7735_ORANGE);
-  tft.printf("long: %.13f \n", longitude);
 
-  Serial.print("lat:  ");
-  Serial.printf("lat: %.16f  long: %.16f \n", lattitude, longitude);
-  delay(1000);
-
-  // delay(250);
-  // Serial.println("waiting for data");
+  send_location_msg();
+  delay(100);
 
   // whatsappMessage(phoneNumber, apiKey, messsage);
 }
@@ -354,4 +340,57 @@ bool get_gps_lat_long()
 void heart_rate_test_loop()
 {
   Serial.println(analogRead(PIN_A0));
+}
+
+void send_location_msg()
+{
+  tft.fillScreen(ST7735_BLACK);
+  tft.setCursor(0, 0);
+  tft.setTextColor(ST7735_WHITE);
+  tft.setTextSize(2);
+  tft.printf("getting gps location");
+
+  while (!get_gps_lat_long())
+  {
+    // do nothing
+  }
+
+  char msg_buffer[100];
+  sprintf(msg_buffer, "Help me! here is my location: https://www.google.com/maps/search/?api=1&query=%f,%f", lattitude, longitude);
+
+  whatsappMessage(phoneNumber, apiKey, String(msg_buffer));
+
+  tft.fillScreen(ST7735_BLACK);
+  tft.setCursor(0, 0);
+  tft.setTextColor(ST7735_WHITE);
+  tft.setTextSize(2);
+  tft.printf("message sent!\n");
+  tft.setTextSize(1);
+  tft.printf("lat: %f\nlong: %f", lattitude, longitude);
+  Serial.printf("lat: %f\nlong: %f", lattitude, longitude);
+  char tmp[100];
+  gpsSerial.readBytes(tmp, 99);
+  delay(1000);
+  return;
+}
+
+void gps_test_loop()
+{
+  while (!get_gps_lat_long())
+  {
+    // do nothing
+  }
+  tft.fillScreen(ST7735_BLACK);
+  tft.setTextSize(1);
+  tft.setCursor(0, 0);
+  tft.setTextColor(ST7735_MAGENTA);
+  tft.printf("lat: %.13f \n", lattitude);
+  tft.setTextColor(ST7735_ORANGE);
+  tft.printf("long: %.13f \n", longitude);
+  char str[100];
+  sprintf(str, "lat: %.16f  long: %.16f \n", lattitude, longitude);
+  Serial.printf("%s\n", str);
+  // Serial.printf("lat: %.16f  long: %.16f \n", lattitude, longitude);
+  delay(1000);
+  return;
 }
