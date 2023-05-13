@@ -12,23 +12,31 @@
 #include <WiFiClient.h>
 #include <UrlEncode.h>
 
-#define BPM_SENSOR_PIN PIN_A0
-#define TFT_CS 15            // ESP8266 GPIO NUMBER
-#define TFT_RST 0            // ESP8266 GPIO NUMBER
-#define TFT_DC 2             // ESP8266 GPIO NUMBER
-#define ACCEL_BUFFER_SIZE 10 // circular buffer size. used for filtering
-#define BPM_HIGH_PULSE_READING 550
+#define TFT_CS 15 // ESP8266 GPIO NUMBER
+#define TFT_RST 0 // ESP8266 GPIO NUMBER
+#define TFT_DC 2  // ESP8266 GPIO NUMBER
 
-#define GPS_SERIAL_RX 0
-#define GPS_SERIAL_TX 16
+#define ACCEL_BUFFER_SIZE 10 // circular buffer size. used for filtering
+#define ACC_MAX_VALUE 22     // m/s^2
+#define ACC_MIN_VALUE 4      // m/s^2
+
+#define HR_SENSOR_PIN PIN_A0      // pin number
+#define HR_HIGH_PULSE_READING 550 // 10 bit analog read value
+#define MAX_HEART_RATE 180        // bpm
+#define MIN_HEART_RATE 60         // bpm
+
+#define GPS_SERIAL_RX 0  // pin number
+#define GPS_SERIAL_TX 16 // pin number
+
+#define GPS_READ_DELAY 1 // milliseconds (tested with 2ms)
 
 ////////////////////////////// Global variables //////////////////////////////
 
 /////////// Neo-6M gps variables
 SoftwareSerial gpsSerial(GPS_SERIAL_RX, GPS_SERIAL_TX);
 TinyGPSPlus gps;
-double lattitude = 0;
-double longitude = 0;
+double lattitude = 32.095302;
+double longitude = 34.769904;
 
 /////////// accelerometer variables
 Adafruit_ADXL345_Unified accel(12345); // The number 12345 is actually just a placeholder value used to initialize the ADXL345 sensor object.
@@ -78,14 +86,14 @@ inline void main_operational_setup(void);
 inline void main_operational_loop(void);
 
 // misc functions
-bool calculate_heart_rate(int, int, int);
+bool calculate_heart_rate(void);
 float accel_get_acceleration_norm(void);
 void accel_buffer_add_data(float);
 float accel_buffer_get_oldest_data(void);
 void get_gps_raw(void);
 bool get_gps_lat_long(void);
 void send_location_msg(void);
-void whatsappMessage(String, String, String);
+bool whatsappMessage(String);
 void exception_handler(String msg);
 void tft_print_headline(String);
 void tft_print_ok(void);
@@ -117,13 +125,45 @@ inline void main_operational_setup(void)
 
 inline void main_operational_loop(void)
 {
+  // get location
+  get_gps_lat_long();
+
+  // read sensors
+  float acc_norm = accel_get_acceleration_norm();
+  bool HR_calculation_success = calculate_heart_rate();
+
+  // check free fall condition
+  if (acc_norm < ACC_MIN_VALUE)
+  {
+    // send alarm ad display on screen
+  }
+
+  // check hit condition
+  if (acc_norm > ACC_MAX_VALUE)
+  {
+    // send alarm ad display on screen
+  }
+
+  // check heart rate condition
+  if (HR_calculation_success && heart_rate > MAX_HEART_RATE)
+  {
+    // send alarm
+  }
+
+  if (digitalRead(9) == HIGH)
+  {
+    // https://randomnerdtutorials.com/esp8266-pinout-reference-gpios/
+    // need to pull this pin low with 10K resistor and attach to high
+
+    // send alarm
+  }
 }
 
 // Heart rate sensor
-bool calculate_heart_rate(int signal_pin, int max_heart_rate, int min_heart_rate)
+bool calculate_heart_rate()
 {
-  int sensor_value = analogRead(signal_pin);
-  int threshold = BPM_HIGH_PULSE_READING;
+  int sensor_value = analogRead(HR_SENSOR_PIN);
+  int threshold = HR_HIGH_PULSE_READING;
   bool success = false;
 
   if (sensor_value > threshold && !peak_detected)
@@ -132,7 +172,7 @@ bool calculate_heart_rate(int signal_pin, int max_heart_rate, int min_heart_rate
 
     // calculte measured heart rate and see that it fits withing specified boundaries
     int measured_heart_rate = 60000 / (int)(millis() - last_peak_time);
-    if (measured_heart_rate >= min_heart_rate && measured_heart_rate <= max_heart_rate)
+    if (measured_heart_rate >= MIN_HEART_RATE && measured_heart_rate <= MAX_HEART_RATE)
     {
       heart_rate = measured_heart_rate;
       success = true;
@@ -212,7 +252,7 @@ void send_location_msg()
   char msg_buffer[100];
   sprintf(msg_buffer, "Help me! here is my location: https://www.google.com/maps/search/?api=1&query=%f,%f", lattitude, longitude);
 
-  whatsappMessage(phoneNumber, apiKey, String(msg_buffer));
+  whatsappMessage(String(msg_buffer));
 
   tft.fillScreen(ST7735_BLACK);
   tft.setCursor(0, 0);
@@ -336,8 +376,9 @@ float accel_buffer_get_oldest_data()
   return oldestData;
 }
 
-void whatsappMessage(String phoneNumber, String apiKey, String message)
+bool whatsappMessage(String message)
 {
+  bool success = false;
   // Data to send with HTTP POST
   String url = "http://api.callmebot.com/whatsapp.php?phone=" + phoneNumber + "&apikey=" + apiKey + "&text=" + urlEncode(message);
   WiFiClient client;
@@ -352,6 +393,7 @@ void whatsappMessage(String phoneNumber, String apiKey, String message)
   if (httpResponseCode == 200)
   {
     Serial.print("Message sent successfully");
+    success = true;
   }
   else
   {
@@ -362,6 +404,8 @@ void whatsappMessage(String phoneNumber, String apiKey, String message)
 
   // Free resources
   http.end();
+
+  return success;
 }
 
 // GPS
@@ -410,14 +454,14 @@ void get_gps_raw()
 bool get_gps_lat_long()
 {
   bool success = false;
+
   if (gpsSerial.available() > 0)
   {
     while (gpsSerial.available() > 0)
     {
       char temp = (char)gpsSerial.read();
       gps.encode(temp);
-      // Serial.print(temp);
-      delay(2);
+      delay(1);
     }
   }
 
