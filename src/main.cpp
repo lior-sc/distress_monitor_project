@@ -428,7 +428,17 @@ void gps_setup()
   delay(500);
   tft.setTextColor(ST7735_WHITE);
   tft.setTextSize(1);
-  tft.printf("Finished GPS setup");
+  tft.printf("Finished GPS setup\n\n");
+  tft.printf("getting current location");
+
+  for (int i = 0; i < 10; i++)
+  {
+    get_gps_lat_long();
+    delay(1000);
+    tft.print(".");
+  }
+
+  tft.printf("\nlat: %.6f \nlong: %.6f", lattitude, longitude);
   delay(1000);
 }
 
