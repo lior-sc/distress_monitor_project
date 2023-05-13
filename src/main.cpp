@@ -92,7 +92,7 @@ void accel_buffer_add_data(float);
 float accel_buffer_get_oldest_data(void);
 void get_gps_raw(void);
 bool get_gps_lat_long(void);
-void send_location_msg(void);
+bool send_location_msg(void);
 bool whatsappMessage(String);
 void exception_handler(String msg);
 void tft_print_headline(String);
@@ -115,7 +115,7 @@ void loop()
 // main algorithm
 inline void main_operational_setup(void)
 {
-  Serial.begin(115200);
+  Serial.begin(9600);
   TFT_setup();
   wifi_setup();
   accel_setup();
@@ -236,36 +236,36 @@ inline bool wifi_setup(void)
   return true;
 }
 
-void send_location_msg()
+bool send_location_msg()
 {
+  bool success = false;
   tft.fillScreen(ST7735_BLACK);
   tft.setCursor(0, 0);
   tft.setTextColor(ST7735_WHITE);
-  tft.setTextSize(2);
-  tft.printf("getting gps location");
-
-  while (!get_gps_lat_long())
-  {
-    // do nothing
-  }
+  tft.setTextSize(1);
+  tft.printf("Trying to send distress signal");
 
   char msg_buffer[100];
   sprintf(msg_buffer, "Help me! here is my location: https://www.google.com/maps/search/?api=1&query=%f,%f", lattitude, longitude);
 
-  whatsappMessage(String(msg_buffer));
+  success = whatsappMessage(String(msg_buffer));
 
-  tft.fillScreen(ST7735_BLACK);
-  tft.setCursor(0, 0);
-  tft.setTextColor(ST7735_WHITE);
-  tft.setTextSize(2);
-  tft.printf("message sent!\n");
-  tft.setTextSize(1);
-  tft.printf("lat: %f\nlong: %f", lattitude, longitude);
-  Serial.printf("lat: %f\nlong: %f", lattitude, longitude);
+  if (success)
+  {
+    tft.fillScreen(ST7735_BLACK);
+    tft.setCursor(0, 0);
+    tft.setTextColor(ST7735_WHITE);
+    tft.setTextSize(2);
+    tft.printf("message sent!\n");
+    tft.setTextSize(1);
+    tft.printf("lat: %f\nlong: %f", lattitude, longitude);
+    Serial.printf("lat: %f\nlong: %f", lattitude, longitude);
+  }
   char tmp[100];
   gpsSerial.readBytes(tmp, 99);
   delay(1000);
-  return;
+
+  return success;
 }
 
 // lcd
@@ -431,15 +431,25 @@ void gps_setup()
   tft.printf("Finished GPS setup\n\n");
   tft.printf("getting current location");
 
-  for (int i = 0; i < 10; i++)
+  for (int i = 0; i < 5; i++)
   {
     get_gps_lat_long();
     delay(1000);
     tft.print(".");
   }
 
-  tft.printf("\nlat: %.6f \nlong: %.6f", lattitude, longitude);
+  tft.printf("\n\nlat: %.6f \nlong: %.6f\n", lattitude, longitude);
   delay(1000);
+
+  for (int i = 0; i < 5; i++)
+  {
+    tft.print(".");
+    if (send_location_msg())
+    {
+      break;
+    }
+    delay(2000);
+  }
 }
 
 void get_gps_raw()
