@@ -14,7 +14,7 @@
 #define TFT_RST 0            // ESP8266 GPIO NUMBER
 #define TFT_DC 2             // ESP8266 GPIO NUMBER
 #define ACCEL_BUFFER_SIZE 10 // circular buffer size. used for filtering
-#define BPM_HIGH_PULSE_READING 600
+#define BPM_HIGH_PULSE_READING 550
 
 #define GPS_SERIAL_RX 0
 #define GPS_SERIAL_TX 16
@@ -80,9 +80,13 @@ void setup()
   // put your setup code here, to run once:
   // pinMode(LED_BUILTIN, OUTPUT);
   Serial.begin(9600);
+
   TFT_setup();
+
   accel_setup();
-  wifi_setup();
+
+  // wifi_setup();
+
   Serial.println("setup gps");
   gps_setup();
   delay(1000);
@@ -92,20 +96,29 @@ void setup()
 void loop()
 {
   // accel_test_loop();
+
   // accel_test_loop_serial();
+
   // get_gps_raw();
 
-  send_location_msg();
-  delay(100);
+  // heart_rate_test_loop();
+
+  calculate_heart_rate(PIN_A0, 180, 60);
+  Serial.printf("HR: %d\n", heart_rate);
+
+  // send_location_msg();
+  // delay(100);
 
   // whatsappMessage(phoneNumber, apiKey, messsage);
 }
 
 ////////////////////////////// Functions //////////////////////////////
+
+// Heart rate sensor
 bool calculate_heart_rate(int signal_pin, int max_heart_rate, int min_heart_rate)
 {
   int sensor_value = analogRead(signal_pin);
-  int threshold = 600;
+  int threshold = BPM_HIGH_PULSE_READING;
   bool success = false;
 
   if (sensor_value > threshold && !peak_detected)
@@ -141,6 +154,12 @@ bool calculate_heart_rate(int signal_pin, int max_heart_rate, int min_heart_rate
   return success;
 }
 
+void heart_rate_test_loop()
+{
+  Serial.println(analogRead(PIN_A0));
+}
+
+// Wifi
 inline bool wifi_setup(void)
 {
   // establishing wifi connection
@@ -163,6 +182,39 @@ inline bool wifi_setup(void)
   return true;
 }
 
+void send_location_msg()
+{
+  tft.fillScreen(ST7735_BLACK);
+  tft.setCursor(0, 0);
+  tft.setTextColor(ST7735_WHITE);
+  tft.setTextSize(2);
+  tft.printf("getting gps location");
+
+  while (!get_gps_lat_long())
+  {
+    // do nothing
+  }
+
+  char msg_buffer[100];
+  sprintf(msg_buffer, "Help me! here is my location: https://www.google.com/maps/search/?api=1&query=%f,%f", lattitude, longitude);
+
+  whatsappMessage(phoneNumber, apiKey, String(msg_buffer));
+
+  tft.fillScreen(ST7735_BLACK);
+  tft.setCursor(0, 0);
+  tft.setTextColor(ST7735_WHITE);
+  tft.setTextSize(2);
+  tft.printf("message sent!\n");
+  tft.setTextSize(1);
+  tft.printf("lat: %f\nlong: %f", lattitude, longitude);
+  Serial.printf("lat: %f\nlong: %f", lattitude, longitude);
+  char tmp[100];
+  gpsSerial.readBytes(tmp, 99);
+  delay(1000);
+  return;
+}
+
+// lcd
 inline void TFT_setup(void)
 {
   tft.initR(INITR_GREENTAB);
@@ -183,6 +235,7 @@ inline void TFT_setup(void)
   delay(100);
 }
 
+// accelerometer
 inline bool accel_setup()
 {
   // begin accelerometer operation
@@ -210,7 +263,7 @@ float accel_get_acceleration_norm()
   accel.getEvent(&event);
 
   // calculate and return acceleration vector norm
-  return sqrt(pow(event.acceleration.x, 2) + pow(event.acceleration.y, 2) + pow(event.acceleration.z, 2));
+  return (sqrt(pow(event.acceleration.x, 2) + pow(event.acceleration.y, 2) + pow(event.acceleration.z, 2)) - 2);
 }
 
 void accel_buffer_add_data(float newData)
@@ -263,9 +316,11 @@ inline void accel_test_loop_serial()
   accel.getEvent(&event);
 
   // print acceleration values
-  Serial.print("x: " + String(event.acceleration.x) + "  ");
-  Serial.print("y: " + String(event.acceleration.y) + "  ");
-  Serial.println("z: " + String(event.acceleration.z) + "  ");
+  printf("x: %.3f, y: %.3f, z: %.3f, norm: %.3f\n",
+         event.acceleration.x,
+         event.acceleration.y,
+         event.acceleration.z,
+         accel_get_acceleration_norm());
 
   /** @note
    * in order to avoid screen blinking we need to rewrite the number only if it is changed.
@@ -275,6 +330,7 @@ inline void accel_test_loop_serial()
   delay(10);
 }
 
+// GPS
 void gps_setup()
 {
   Serial.println("////////////////////// NEO-6M GPS setup //////////////////////");
@@ -335,43 +391,6 @@ bool get_gps_lat_long()
     success = true;
   }
   return success;
-}
-
-void heart_rate_test_loop()
-{
-  Serial.println(analogRead(PIN_A0));
-}
-
-void send_location_msg()
-{
-  tft.fillScreen(ST7735_BLACK);
-  tft.setCursor(0, 0);
-  tft.setTextColor(ST7735_WHITE);
-  tft.setTextSize(2);
-  tft.printf("getting gps location");
-
-  while (!get_gps_lat_long())
-  {
-    // do nothing
-  }
-
-  char msg_buffer[100];
-  sprintf(msg_buffer, "Help me! here is my location: https://www.google.com/maps/search/?api=1&query=%f,%f", lattitude, longitude);
-
-  whatsappMessage(phoneNumber, apiKey, String(msg_buffer));
-
-  tft.fillScreen(ST7735_BLACK);
-  tft.setCursor(0, 0);
-  tft.setTextColor(ST7735_WHITE);
-  tft.setTextSize(2);
-  tft.printf("message sent!\n");
-  tft.setTextSize(1);
-  tft.printf("lat: %f\nlong: %f", lattitude, longitude);
-  Serial.printf("lat: %f\nlong: %f", lattitude, longitude);
-  char tmp[100];
-  gpsSerial.readBytes(tmp, 99);
-  delay(1000);
-  return;
 }
 
 void gps_test_loop()
