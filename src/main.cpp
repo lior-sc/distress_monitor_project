@@ -93,10 +93,7 @@ void tft_print_headline(String);
 
 void setup()
 {
-  // main_operational_setup();
-  TFT_setup();
-  wifi_setup();
-  accel_setup();
+  main_operational_setup();
 }
 
 void loop()
@@ -249,13 +246,8 @@ inline void TFT_setup(void)
   tft.setTextColor(ST7735_GREEN);
   tft.print("yellow \nbutton!\n\n");
   tft.setTextColor(ST7735_WHITE);
-  for (int i = 0; i < 3; i++)
-  {
-    delay(1000);
-    tft.print(".");
-  }
 
-  delay(500);
+  delay(1000);
   tft.print("\n\n (and hope for the best!)");
   delay(250);
 }
@@ -267,6 +259,10 @@ void tft_print_headline(String headline)
   tft.setTextColor(ST7735_MAGENTA);
   tft.setCursor(0, 0);
   tft.printf("%s\n\n", headline.c_str());
+}
+
+void tft_print_ok()
+{
 }
 
 // accelerometer
@@ -372,6 +368,14 @@ void gps_setup()
   }
 
   Serial.println("\n\nFinished GPS setup");
+
+  // write to TFT screen
+  tft_print_headline("Neo-6m");
+  delay(500);
+  tft.setTextColor(ST7735_WHITE);
+  tft.setTextSize(1);
+  tft.printf("Finished GPS setup");
+  delay(1000);
 }
 
 void get_gps_raw()
