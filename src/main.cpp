@@ -5,9 +5,12 @@
 #include <Adafruit_ST7735.h>
 #include <SPI.h>
 #include <ESP8266WiFi.h>
-#include <Callmebot_ESP8266.h>
+// #include <Callmebot_ESP8266.h>
 #include <SoftwareSerial.h>
 #include <TinyGPS++.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClient.h>
+#include <UrlEncode.h>
 
 #define BPM_SENSOR_PIN PIN_A0
 #define TFT_CS 15            // ESP8266 GPIO NUMBER
@@ -44,8 +47,8 @@ Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 // sensors_event_t accel_event[2];
 
 ///////////  wifi variables
-const char *ssid = "Galaxy A53 5G 4C72";
-const char *password = "otkm7250";
+const char *ssid = "liornet_WR_2.4_Ghz";
+const char *password = "0544988409";
 
 // callmebot variables
 String phoneNumber = "+972528854006";
@@ -58,61 +61,64 @@ int heart_rate = 60;
 unsigned long int last_peak_time = false;
 
 ////////////////////////////// Function prototypes //////////////////////////////
+
+// setup functions
+inline void TFT_setup(void);
+inline bool accel_setup(void);
+inline bool wifi_setup(void);
+inline void gps_setup(void);
+
+// test functions
+inline void accel_test_loop(void);
+inline void accel_test_loop_serial(void);
+inline void heart_rate_test_loop(void);
+
+// main algorithm functions
+inline void main_operational_setup(void);
+inline void main_operational_loop(void);
+
+// misc functions
 bool calculate_heart_rate(int, int, int);
-void TFT_setup(void);
-bool accel_setup(void);
-bool wifi_setup(void);
 float accel_get_acceleration_norm(void);
 void accel_buffer_add_data(float);
 float accel_buffer_get_oldest_data(void);
-void accel_test_loop(void);
-inline void accel_test_loop_serial();
-void gps_setup();
-void get_gps_raw();
-void heart_rate_test_loop();
-bool get_gps_lat_long();
-void send_location_msg();
+void get_gps_raw(void);
+bool get_gps_lat_long(void);
+void send_location_msg(void);
+void whatsappMessage(String, String, String);
+void exception_handler(String msg);
+void tft_print_headline(String);
 
 ////////////////////////////// Setup & Loop functions //////////////////////////////
 
 void setup()
 {
-  // put your setup code here, to run once:
-  // pinMode(LED_BUILTIN, OUTPUT);
-  Serial.begin(9600);
-
+  // main_operational_setup();
   TFT_setup();
-
+  wifi_setup();
   accel_setup();
-
-  // wifi_setup();
-
-  Serial.println("setup gps");
-  gps_setup();
-  delay(1000);
-  // whatsappMessage(phoneNumber, apiKey, messsage);
 }
 
 void loop()
 {
-  // accel_test_loop();
-
-  // accel_test_loop_serial();
-
-  // get_gps_raw();
-
-  // heart_rate_test_loop();
-
-  calculate_heart_rate(PIN_A0, 180, 60);
-  Serial.printf("HR: %d\n", heart_rate);
-
-  // send_location_msg();
-  // delay(100);
-
-  // whatsappMessage(phoneNumber, apiKey, messsage);
+  main_operational_loop();
 }
 
 ////////////////////////////// Functions //////////////////////////////
+
+// main algorithm
+inline void main_operational_setup(void)
+{
+  Serial.begin(115200);
+  TFT_setup();
+  wifi_setup();
+  accel_setup();
+  gps_setup();
+}
+
+inline void main_operational_loop(void)
+{
+}
 
 // Heart rate sensor
 bool calculate_heart_rate(int signal_pin, int max_heart_rate, int min_heart_rate)
@@ -154,30 +160,39 @@ bool calculate_heart_rate(int signal_pin, int max_heart_rate, int min_heart_rate
   return success;
 }
 
-void heart_rate_test_loop()
-{
-  Serial.println(analogRead(PIN_A0));
-}
-
 // Wifi
 inline bool wifi_setup(void)
 {
   // establishing wifi connection
   WiFi.begin(ssid, password);
-  Serial.print("Connecting to ");
-  Serial.print(ssid);
-  Serial.println("...");
+  tft.fillScreen(ST7735_BLACK);
+  tft.setTextSize(2);
+  tft.setTextColor(ST7735_MAGENTA);
+  tft.setCursor(0, 0);
+  tft.print("WiFi setup\n\n");
+
+  tft.setTextSize(1);
+  tft.setTextColor(ST7735_WHITE);
+  tft.printf("Connecting to: \n\n%s", ssid);
+
+  int count = 0;
 
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(1000);
-    Serial.print(".");
+    tft.print(".");
+    count++;
+    if (count >= 20)
+    {
+      exception_handler("can't connect to Wifi");
+    }
   }
-  Serial.println("");
-  Serial.println("WiFi connected ");
-  Serial.print("Connected to WiFi network with IP address: ");
-  Serial.println(WiFi.localIP());
-  Serial.println();
+  tft.println("WiFi connected ");
+  tft.print("Connected to WiFi network with IP address: ");
+  tft.println(WiFi.localIP());
+  tft.println();
+
+  delay(1000);
 
   return true;
 }
@@ -218,21 +233,40 @@ void send_location_msg()
 inline void TFT_setup(void)
 {
   tft.initR(INITR_GREENTAB);
+  // set
   tft.fillScreen(ST77XX_BLACK);
-
-  tft.setRotation(1);
-  tft.setCursor(0, 0);
-  tft.setTextColor(ST7735_GREEN);
+  tft.setRotation(3);
   tft.setTextWrap(true);
-  tft.setTextSize(2);
-  tft.println("Hello !");
-  tft.setTextColor(ST7735_CYAN);
-  tft.setTextSize(3);
-  tft.println("Hello !");
-  tft.setTextColor(ST7735_ORANGE);
+
   tft.setTextSize(4);
-  tft.println("Hello!!");
-  delay(100);
+  tft.setTextColor(ST7735_ORANGE);
+  tft.setCursor(0, 0);
+  tft.println("Hello!");
+
+  tft.setTextSize(1);
+  tft.setTextColor(ST7735_WHITE);
+  tft.print("\nWhen life gets you down, \njust press the ");
+  tft.setTextColor(ST7735_GREEN);
+  tft.print("yellow \nbutton!\n\n");
+  tft.setTextColor(ST7735_WHITE);
+  for (int i = 0; i < 3; i++)
+  {
+    delay(1000);
+    tft.print(".");
+  }
+
+  delay(500);
+  tft.print("\n\n (and hope for the best!)");
+  delay(250);
+}
+
+void tft_print_headline(String headline)
+{
+  tft.fillScreen(ST7735_BLACK);
+  tft.setTextSize(2);
+  tft.setTextColor(ST7735_MAGENTA);
+  tft.setCursor(0, 0);
+  tft.printf("%s\n\n", headline.c_str());
 }
 
 // accelerometer
@@ -245,13 +279,26 @@ inline bool accel_setup()
   // get and print sensor data on serial
   sensor_t sensor_data;
   accel.getSensor(&sensor_data);
+
+  // Serial print the accelerometer data
   Serial.println("\n////////////////////// adxl345 sensor data //////////////////////");
-  Serial.println("Sensor id: " + String(sensor_data.sensor_id));
-  Serial.println("Resolution: " + String(sensor_data.resolution));
-  Serial.println("max_value: " + String(sensor_data.max_value) + " [m/s^2]");
-  Serial.println("min_value: " + String(sensor_data.min_value) + " [m/s^2]");
-  // set delay to see the daya should any other information arrive
+  Serial.printf("Sensor id: %d", sensor_data.sensor_id);
+  Serial.printf("Resolution: %.3f [m/s^2]\n", sensor_data.resolution);
+  Serial.printf("max_value: %.2f [m/s^2]\n", sensor_data.max_value);
+  Serial.printf("min_value: %.2f [m/s^2]\n", sensor_data.min_value);
+
+  // print to tft screen
+  tft_print_headline("ADXL345");
+  tft.setTextColor(ST7735_WHITE);
+  tft.setTextSize(1);
+  tft.printf("Sensor id: %d\n", sensor_data.sensor_id);
+  tft.printf("Resolution: %.3f [m/s^2]\n", sensor_data.resolution);
+  tft.printf("max_value: %.2f [m/s^2]\n", sensor_data.max_value);
+  tft.printf("min_value: %.2f [m/s^2]\n", sensor_data.min_value);
+
+  // set delay to see the data
   delay(1000);
+
   // return the success of the accel.begin method
   return success;
 }
@@ -283,51 +330,32 @@ float accel_buffer_get_oldest_data()
   return oldestData;
 }
 
-inline void accel_test_loop()
+void whatsappMessage(String phoneNumber, String apiKey, String message)
 {
-  // get adxl345 reading
-  sensors_event_t event;
-  accel.getEvent(&event);
+  // Data to send with HTTP POST
+  String url = "http://api.callmebot.com/whatsapp.php?phone=" + phoneNumber + "&apikey=" + apiKey + "&text=" + urlEncode(message);
+  WiFiClient client;
+  HTTPClient http;
+  http.begin(client, url);
 
-  // set TFT text configurations and clear existing text
-  tft.setCursor(0, 0);
-  tft.setTextColor(ST7735_MAGENTA);
-  tft.setTextWrap(true);
-  tft.setTextSize(2);
-  tft.fillRect(36, 0, 100, 52, ST7735_BLACK);
-  // print acceleration values
-  tft.println("x: " + String(event.acceleration.x));
-  tft.println("y: " + String(event.acceleration.y));
-  tft.println("z: " + String(event.acceleration.z));
-  tft.print("");
+  // Specify content-type header
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
-  /** @note
-   * in order to avoid screen blinking we need to rewrite the number only if it is changed.
-   * we need to do a comparison
-   * */
+  // Send HTTP POST request
+  int httpResponseCode = http.POST(url);
+  if (httpResponseCode == 200)
+  {
+    Serial.print("Message sent successfully");
+  }
+  else
+  {
+    Serial.println("Error sending the message");
+    Serial.print("HTTP response code: ");
+    Serial.println(httpResponseCode);
+  }
 
-  delay(10);
-}
-
-inline void accel_test_loop_serial()
-{
-  // get adxl345 reading
-  sensors_event_t event;
-  accel.getEvent(&event);
-
-  // print acceleration values
-  printf("x: %.3f, y: %.3f, z: %.3f, norm: %.3f\n",
-         event.acceleration.x,
-         event.acceleration.y,
-         event.acceleration.z,
-         accel_get_acceleration_norm());
-
-  /** @note
-   * in order to avoid screen blinking we need to rewrite the number only if it is changed.
-   * we need to do a comparison
-   * */
-
-  delay(10);
+  // Free resources
+  http.end();
 }
 
 // GPS
@@ -393,7 +421,60 @@ bool get_gps_lat_long()
   return success;
 }
 
-void gps_test_loop()
+// test functions
+inline void accel_test_loop()
+{
+  // get adxl345 reading
+  sensors_event_t event;
+  accel.getEvent(&event);
+
+  // set TFT text configurations and clear existing text
+  tft.setCursor(0, 0);
+  tft.setTextColor(ST7735_MAGENTA);
+  tft.setTextWrap(true);
+  tft.setTextSize(2);
+  tft.fillRect(36, 0, 100, 52, ST7735_BLACK);
+  // print acceleration values
+  tft.println("x: " + String(event.acceleration.x));
+  tft.println("y: " + String(event.acceleration.y));
+  tft.println("z: " + String(event.acceleration.z));
+  tft.print("");
+
+  /** @note
+   * in order to avoid screen blinking we need to rewrite the number only if it is changed.
+   * we need to do a comparison
+   * */
+
+  delay(10);
+}
+
+inline void accel_test_loop_serial()
+{
+  // get adxl345 reading
+  sensors_event_t event;
+  accel.getEvent(&event);
+
+  // print acceleration values
+  printf("x: %.3f, y: %.3f, z: %.3f, norm: %.3f\n",
+         event.acceleration.x,
+         event.acceleration.y,
+         event.acceleration.z,
+         accel_get_acceleration_norm());
+
+  /** @note
+   * in order to avoid screen blinking we need to rewrite the number only if it is changed.
+   * we need to do a comparison
+   * */
+
+  delay(10);
+}
+
+inline void heart_rate_test_loop()
+{
+  Serial.println(analogRead(PIN_A0));
+}
+
+inline void gps_test_loop()
 {
   while (!get_gps_lat_long())
   {
@@ -412,4 +493,24 @@ void gps_test_loop()
   // Serial.printf("lat: %.16f  long: %.16f \n", lattitude, longitude);
   delay(1000);
   return;
+}
+
+void exception_handler(String msg)
+{
+  tft.fillScreen(ST7735_BLACK);
+  tft.setTextColor(ST7735_RED);
+  tft.setTextSize(4);
+  tft.setCursor(0, 0);
+  tft.printf("Exception!\n");
+  tft.setTextColor(ST7735_WHITE);
+  tft.setTextSize(1);
+  tft.println(msg);
+  tft.setTextColor(ST7735_GREEN);
+  tft.printf("\n\nreset controller to \ncontinue!");
+  delay(20000);
+
+  while (1)
+  {
+    // do nothing
+  }
 }
