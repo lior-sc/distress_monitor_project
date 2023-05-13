@@ -188,7 +188,7 @@ inline bool wifi_setup(void)
     }
   }
   tft.println("WiFi connected ");
-  tft.print("Connected to WiFi network with IP address: ");
+  tft.print("Connected to WiFi network with IP address: \n");
   tft.println(WiFi.localIP());
   tft.println();
 
