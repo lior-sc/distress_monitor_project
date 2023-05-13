@@ -88,6 +88,7 @@ void send_location_msg(void);
 void whatsappMessage(String, String, String);
 void exception_handler(String msg);
 void tft_print_headline(String);
+void tft_print_ok(void);
 
 ////////////////////////////// Setup & Loop functions //////////////////////////////
 
@@ -111,6 +112,7 @@ inline void main_operational_setup(void)
   wifi_setup();
   accel_setup();
   gps_setup();
+  tft_print_ok();
 }
 
 inline void main_operational_loop(void)
@@ -261,8 +263,16 @@ void tft_print_headline(String headline)
   tft.printf("%s\n\n", headline.c_str());
 }
 
-void tft_print_ok()
+void tft_print_ok(void)
 {
+  tft.fillScreen(ST7735_BLACK);
+  tft.setCursor(0, 0);
+
+  tft.setTextColor(ST7735_GREEN);
+  tft.setTextSize(2);
+  tft.printf("Status: OK\n\n");
+
+  return;
 }
 
 // accelerometer
