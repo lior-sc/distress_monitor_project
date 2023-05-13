@@ -175,6 +175,7 @@ bool calculate_heart_rate()
     if (measured_heart_rate >= MIN_HEART_RATE && measured_heart_rate <= MAX_HEART_RATE)
     {
       heart_rate = measured_heart_rate;
+      Serial.printf("HR: %d\n", heart_rate);
       success = true;
     }
     else
@@ -188,7 +189,7 @@ bool calculate_heart_rate()
     last_peak_time = millis();
 
     // debug print
-    Serial.println("thresh!  " + String(heart_rate));
+    // Serial.println("thresh!  " + String(heart_rate));
   }
   else if (sensor_value < threshold && peak_detected)
   {
