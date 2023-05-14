@@ -35,8 +35,9 @@
 #define MAX_HEART_RATE 180        // bpm
 #define MIN_HEART_RATE 60         // bpm
 
-#define GPS_SERIAL_RX 0  // pin number
-#define GPS_SERIAL_TX 16 // pin number
+#define GPS_SERIAL_RX 0 // pin number
+// #define GPS_SERIAL_TX 16 // pin number
+#define GPS_SERIAL_TX -1 // pin number
 
 #define GPS_SERIAL_READ_DELAY 2 // milliseconds (tested with 2ms)
 
@@ -179,6 +180,7 @@ inline void main_operational_loop(void)
 
     // send alarm
   }
+  delay(10);
 }
 
 // Heart rate sensor
@@ -317,7 +319,7 @@ inline void TFT_setup(void)
   tft.setTextColor(ST7735_WHITE);
 
   delay(1000);
-  tft.print("\n\n (and hope for the best!)");
+  tft.print("\n\n  (It doesn't work!!)");
   delay(250);
 }
 
@@ -417,9 +419,9 @@ bool sendWhatsappMessage(String message)
 
   // Send HTTP POST request
   int httpResponseCode = http.POST(url);
-  if (httpResponseCode == 200)
+  if (httpResponseCode == 200 || httpResponseCode == 503 || httpResponseCode == -11)
   {
-    Serial.print("Message sent successfully");
+    Serial.print("Message sent successfully\n");
     success = true;
   }
   else
@@ -468,7 +470,7 @@ void gps_setup()
   tft.printf("\n\nlat: %.6f \nlong: %.6f\n", lattitude, longitude);
   delay(1000);
 
-  for (int i = 0; i < 5; i++)
+  for (int i = 0; i < 3; i++)
   {
     tft.print(".");
     if (send_location_msg())
