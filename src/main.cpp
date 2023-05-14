@@ -1,16 +1,26 @@
 #include <Arduino.h>
+
+// accelerometer
 #include <Wire.h>
 #include <Adafruit_I2CDevice.h>
 #include <Adafruit_ADXL345_U.h>
+
+// lcd
 #include <Adafruit_ST7735.h>
 #include <SPI.h>
-#include <ESP8266WiFi.h>
-// #include <Callmebot_ESP8266.h>
+
+// GPS
 #include <SoftwareSerial.h>
 #include <TinyGPS++.h>
+
+// WiFi
+#include <ESP8266WiFi.h>
+
+// Callmebot
 #include <ESP8266HTTPClient.h>
 #include <WiFiClient.h>
 #include <UrlEncode.h>
+// #include <Callmebot_ESP8266.h>
 
 #define TFT_CS 15 // ESP8266 GPIO NUMBER
 #define TFT_RST 0 // ESP8266 GPIO NUMBER
@@ -28,9 +38,28 @@
 #define GPS_SERIAL_RX 0  // pin number
 #define GPS_SERIAL_TX 16 // pin number
 
-#define GPS_READ_DELAY 1 // milliseconds (tested with 2ms)
+#define GPS_SERIAL_READ_DELAY 2 // milliseconds (tested with 2ms)
 
 ////////////////////////////// Global variables //////////////////////////////
+
+///////////  wifi variables
+
+//// WR wifi
+// const char *ssid = "liornet_WR_2.4_Ghz";
+// const char *password = "0544988409";
+
+//// home wifi
+// const char *ssid = "liornet";
+// const char *password = "0544988409";
+
+// phone wifi
+const char *ssid = "Galaxy A53 5G 4C72";
+const char *password = "otkm7250";
+
+// callmebot variables
+String phoneNumber = "+972528854006";
+String apiKey = "7335050";
+String messsage = "Here's the location you requested: https://www.google.com/maps/search/?api=1&query=32.095368,34.769905";
 
 /////////// Neo-6M gps variables
 SoftwareSerial gpsSerial(GPS_SERIAL_RX, GPS_SERIAL_TX);
@@ -53,15 +82,6 @@ int accel_oldest_index = 0;
 ///////////  TFT variables
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 // sensors_event_t accel_event[2];
-
-///////////  wifi variables
-const char *ssid = "liornet_WR_2.4_Ghz";
-const char *password = "0544988409";
-
-// callmebot variables
-String phoneNumber = "+972528854006";
-String apiKey = "7335050";
-String messsage = "Here's the location you requested: https://www.google.com/maps/search/?api=1&query=32.166206415848514,34.89679626029493";
 
 // heart rate sensor variables
 bool peak_detected = false;
@@ -92,8 +112,9 @@ void accel_buffer_add_data(float);
 float accel_buffer_get_oldest_data(void);
 void get_gps_raw(void);
 bool get_gps_lat_long(void);
+char msg_buffer[100];
 bool send_location_msg(void);
-bool whatsappMessage(String);
+bool sendWhatsappMessage(String);
 void exception_handler(String msg);
 void tft_print_headline(String);
 void tft_print_ok(void);
@@ -116,6 +137,7 @@ void loop()
 inline void main_operational_setup(void)
 {
   Serial.begin(9600);
+  pinMode(9, INPUT);
   TFT_setup();
   wifi_setup();
   accel_setup();
@@ -249,7 +271,7 @@ bool send_location_msg()
   char msg_buffer[100];
   sprintf(msg_buffer, "Help me! here is my location: https://www.google.com/maps/search/?api=1&query=%f,%f", lattitude, longitude);
 
-  success = whatsappMessage(String(msg_buffer));
+  success = sendWhatsappMessage(String(msg_buffer));
 
   if (success)
   {
@@ -262,8 +284,12 @@ bool send_location_msg()
     tft.printf("lat: %f\nlong: %f", lattitude, longitude);
     Serial.printf("lat: %f\nlong: %f", lattitude, longitude);
   }
-  char tmp[100];
-  gpsSerial.readBytes(tmp, 99);
+  while (gpsSerial.available())
+  {
+    int tmp = 0;
+    tmp = gpsSerial.read();
+    delay(GPS_SERIAL_READ_DELAY);
+  }
   delay(1000);
 
   return success;
@@ -377,7 +403,7 @@ float accel_buffer_get_oldest_data()
   return oldestData;
 }
 
-bool whatsappMessage(String message)
+bool sendWhatsappMessage(String message)
 {
   bool success = false;
   // Data to send with HTTP POST
@@ -466,7 +492,7 @@ void get_gps_raw()
   while (gpsSerial.available())
   {
     Serial.print(gpsSerial.read());
-    delay(2);
+    delay(GPS_SERIAL_READ_DELAY);
   }
 
   Serial.println("\n");
@@ -482,16 +508,12 @@ bool get_gps_lat_long()
     {
       char temp = (char)gpsSerial.read();
       gps.encode(temp);
-      delay(1);
+      delay(2);
     }
   }
 
-  // Serial.println("gps serial available");
-
-  // Serial.println("gps encode");
   if (gps.location.isValid())
   {
-    // Serial.println("gps valid");
     lattitude = gps.location.lat();
     longitude = gps.location.lng();
 
