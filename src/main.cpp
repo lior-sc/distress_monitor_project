@@ -1,4 +1,6 @@
 #include <Arduino.h>
+#include <vector>
+#include <stdio.h>
 
 // accelerometer
 #include <Wire.h>
@@ -34,6 +36,7 @@
 #define HR_HIGH_PULSE_READING 550 // 10 bit analog read value
 #define MAX_HEART_RATE 180        // bpm
 #define MIN_HEART_RATE 60         // bpm
+#define HR_BUFFER_SIZE 15
 
 #define GPS_SERIAL_RX 0 // pin number
 // #define GPS_SERIAL_TX 16 // pin number
@@ -84,10 +87,21 @@ int accel_oldest_index = 0;
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 // sensors_event_t accel_event[2];
 
-// heart rate sensor variables
+/////////// Heart rate sensor variables
+typedef struct
+{
+  int buffer[100];
+  int buffer_size;
+  int head;
+  int tail;
+
+} CIRCULAR_BUFFER;
+
+CIRCULAR_BUFFER hr_cb;
+
 bool peak_detected = false;
-int heart_rate = 60;
-unsigned long int last_peak_time = false;
+int avg_heart_rate = 60;
+unsigned long int last_peak_time = 0;
 
 ////////////////////////////// Function prototypes //////////////////////////////
 
@@ -107,18 +121,23 @@ inline void main_operational_setup(void);
 inline void main_operational_loop(void);
 
 // misc functions
-bool calculate_heart_rate(void);
+int calculate_heart_rate(void);
 float accel_get_acceleration_norm(void);
 void accel_buffer_add_data(float);
 float accel_buffer_get_oldest_data(void);
 void get_gps_raw(void);
 bool get_gps_lat_long(void);
 char msg_buffer[100];
-bool send_location_msg(void);
+bool send_location_msg();
 bool sendWhatsappMessage(String);
-void exception_handler(String msg);
+void exception_handler(char *msg);
 void tft_print_headline(String);
 void tft_print_ok(void);
+void add_to_buffer(CIRCULAR_BUFFER *cb, int value);
+int read_from_buffer(CIRCULAR_BUFFER *cb);
+void update_avg_heart_rate();
+void update_heart_rate();
+void HR_setup();
 
 ////////////////////////////// Setup & Loop functions //////////////////////////////
 
@@ -138,7 +157,7 @@ void loop()
 inline void main_operational_setup(void)
 {
   Serial.begin(9600);
-  pinMode(9, INPUT);
+  HR_setup();
   TFT_setup();
   wifi_setup();
   accel_setup();
@@ -149,71 +168,130 @@ inline void main_operational_setup(void)
 inline void main_operational_loop(void)
 {
   // get location
-  get_gps_lat_long();
+  // get_gps_lat_long();
 
   // read sensors
   float acc_norm = accel_get_acceleration_norm();
-  bool HR_calculation_success = calculate_heart_rate();
+  // bool HR_calculation_success = calculate_heart_rate();
+  update_avg_heart_rate();
 
   // check free fall condition
   if (acc_norm < ACC_MIN_VALUE)
   {
-    // send alarm ad display on screen
+    // fall detected
+    tft_print_headline("Fall detected!");
+    tft.setTextColor(ST7735_WHITE);
+    tft.setTextSize(1);
+    tft.printf("sending alarm and current \nlocation\n\n");
+    bool success = send_location_msg();
+
+    if (success == true)
+    {
+      tft.printf("distress message sent!");
+    }
+    else
+    {
+      tft.printf("you're on you own my man!");
+    }
+    delay(2000);
+    tft_print_ok();
   }
 
   // check hit condition
   if (acc_norm > ACC_MAX_VALUE)
   {
-    // send alarm ad display on screen
+    // hit detected
+    tft_print_headline("Hit detected!");
+    tft.setTextColor(ST7735_WHITE);
+    tft.setTextSize(1);
+    tft.printf("sending alarm and current \nlocation\n\n");
+    bool success = send_location_msg();
+
+    if (success == true)
+    {
+      tft.printf("distress message sent!");
+    }
+    else
+    {
+      tft.printf("you can do it!");
+    }
+    delay(2000);
+    tft_print_ok();
   }
 
   // check heart rate condition
-  if (HR_calculation_success && heart_rate > MAX_HEART_RATE)
+  if (avg_heart_rate > MAX_HEART_RATE)
   {
     // send alarm
+    tft_print_headline("High HR!");
+    tft.setTextColor(ST7735_WHITE);
+    tft.setTextSize(1);
+    tft.printf("sending alarm and current \nlocation\n\n");
+    bool success = send_location_msg();
+
+    if (success == true)
+    {
+      tft.printf("distress message sent!");
+    }
+    else
+    {
+      tft.printf("too bad!");
+    }
+    delay(2000);
+    tft_print_ok();
   }
 
-  if (digitalRead(9) == HIGH)
-  {
-    // https://randomnerdtutorials.com/esp8266-pinout-reference-gpios/
-    // need to pull this pin low with 10K resistor and attach to high
+  // if (digitalRead(9) == HIGH)
+  // {
+  //   // https://randomnerdtutorials.com/esp8266-pinout-reference-gpios/
+  //   // need to pull this pin low with 10K resistor and attach to high
 
-    // send alarm
-  }
+  //   // send alarm
+  // }
   delay(10);
 }
 
 // Heart rate sensor
-bool calculate_heart_rate()
+void HR_setup()
+{
+  // setup analog pin
+  pinMode(HR_SENSOR_PIN, INPUT); // its not harmful although its unnecessary
+
+  // set circular buffer size (<100)
+  hr_cb.buffer_size = HR_BUFFER_SIZE; // size of the buffer we intend to utilize
+
+  // put one value in buffer
+  int heart_rate = calculate_heart_rate();
+  add_to_buffer(&hr_cb, heart_rate);
+}
+
+int calculate_heart_rate()
 {
   int sensor_value = analogRead(HR_SENSOR_PIN);
   int threshold = HR_HIGH_PULSE_READING;
-  bool success = false;
+  int measured_heart_rate = 0;
+  int heart_rate = 0;
 
   if (sensor_value > threshold && !peak_detected)
   {
     /* A peak was detected. conduct calculations*/
 
     // calculte measured heart rate and see that it fits withing specified boundaries
-    int measured_heart_rate = 60000 / (int)(millis() - last_peak_time);
+    measured_heart_rate = 60000 / (int)(millis() - last_peak_time);
+
     if (measured_heart_rate >= MIN_HEART_RATE && measured_heart_rate <= MAX_HEART_RATE)
     {
       heart_rate = measured_heart_rate;
-      Serial.printf("HR: %d\n", heart_rate);
-      success = true;
+      // success = true;
     }
     else
     {
-      heart_rate = 0;
-      success = false;
+      // do nothing. heart_rate stays at -1
     }
 
     // mark peak detection and reset last peak time measurement
     peak_detected = true;
     last_peak_time = millis();
-
-    // debug print
-    // Serial.println("thresh!  " + String(heart_rate));
   }
   else if (sensor_value < threshold && peak_detected)
   {
@@ -221,7 +299,47 @@ bool calculate_heart_rate()
     peak_detected = false;
   }
 
-  return success;
+  return heart_rate;
+}
+
+void update_heart_rate()
+{
+  int current_heart_rate = calculate_heart_rate();
+  add_to_buffer(&hr_cb, current_heart_rate);
+
+  return;
+}
+void update_avg_heart_rate()
+{
+  update_heart_rate();
+
+  int sum = 0;
+  for (int i = 0; i < HR_BUFFER_SIZE; i++)
+  {
+    sum += calculate_heart_rate();
+  }
+  avg_heart_rate = sum / HR_BUFFER_SIZE;
+}
+
+void add_to_buffer(CIRCULAR_BUFFER *cb, int value)
+{
+  cb->buffer[cb->head] = value;
+  cb->head = (cb->head + 1) % cb->buffer_size;
+  if (cb->head == cb->tail)
+  {
+    cb->tail = (cb->tail + 1) % cb->buffer_size; // discard oldest value
+  }
+}
+
+int read_from_buffer(CIRCULAR_BUFFER *cb)
+{
+  if (cb->head == cb->tail)
+  {
+    return -1; // buffer is empty
+  }
+  int value = cb->buffer[cb->tail];
+  cb->tail = (cb->tail + 1) % cb->buffer_size;
+  return value;
 }
 
 // Wifi
@@ -264,35 +382,34 @@ inline bool wifi_setup(void)
 bool send_location_msg()
 {
   bool success = false;
-  tft.fillScreen(ST7735_BLACK);
-  tft.setCursor(0, 0);
-  tft.setTextColor(ST7735_WHITE);
-  tft.setTextSize(1);
-  tft.printf("Trying to send distress signal");
+  // tft.fillScreen(ST7735_BLACK);
+  // tft.setCursor(0, 0);
+  // tft.setTextColor(ST7735_WHITE);
+  // tft.setTextSize(1);
+  // tft.printf("Trying to send distress signal");
 
   char msg_buffer[100];
-  sprintf(msg_buffer, "Help me! here is my location: https://www.google.com/maps/search/?api=1&query=%f,%f", lattitude, longitude);
+  sprintf(msg_buffer, "Help! here's my location: https://www.google.com/maps/search/?api=1&query=%f,%f", lattitude, longitude);
 
   success = sendWhatsappMessage(String(msg_buffer));
 
-  if (success)
-  {
-    tft.fillScreen(ST7735_BLACK);
-    tft.setCursor(0, 0);
-    tft.setTextColor(ST7735_WHITE);
-    tft.setTextSize(2);
-    tft.printf("message sent!\n");
-    tft.setTextSize(1);
-    tft.printf("lat: %f\nlong: %f", lattitude, longitude);
-    Serial.printf("lat: %f\nlong: %f", lattitude, longitude);
-  }
+  // if (success)
+  // {
+  //   tft.fillScreen(ST7735_BLACK);
+  //   tft.setCursor(0, 0);
+  //   tft.setTextColor(ST7735_WHITE);
+  //   tft.setTextSize(2);
+  //   tft.printf("message sent!\n");
+  //   tft.setTextSize(1);
+  //   tft.printf("lat: %f\nlong: %f", lattitude, longitude);
+  //   Serial.printf("lat: %f\nlong: %f", lattitude, longitude);
+  // }
   while (gpsSerial.available())
   {
-    int tmp = 0;
-    tmp = gpsSerial.read();
+    int tmp = gpsSerial.read();
     delay(GPS_SERIAL_READ_DELAY);
   }
-  delay(1000);
+  // delay(1000);
 
   return success;
 }
@@ -598,16 +715,16 @@ inline void gps_test_loop()
   return;
 }
 
-void exception_handler(String msg)
+void exception_handler(char *msg)
 {
   tft.fillScreen(ST7735_BLACK);
   tft.setTextColor(ST7735_RED);
-  tft.setTextSize(4);
+  tft.setTextSize(2);
   tft.setCursor(0, 0);
   tft.printf("Exception!\n");
   tft.setTextColor(ST7735_WHITE);
   tft.setTextSize(1);
-  tft.println(msg);
+  tft.printf("%s\n", msg);
   tft.setTextColor(ST7735_GREEN);
   tft.printf("\n\nreset controller to \ncontinue!");
   delay(20000);
