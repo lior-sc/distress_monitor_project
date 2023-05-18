@@ -37,11 +37,14 @@
 #define ACC_MIN_VALUE 4      // m/s^2
 
 ////////////// Heart rate sensors defines //////////////
-#define HR_SENSOR_PIN 20          // pin number
+#define HR_SENSOR_PIN 36          // Marked as pin A3 on the board
 #define HR_HIGH_PULSE_READING 550 // 10 bit analog read value
 #define MAX_HEART_RATE 180        // bpm
 #define MIN_HEART_RATE 60         // bpm
 #define HR_BUFFER_SIZE 15
+
+////////////// Push button defines //////////////
+#define PUSH_BUTTON_PIN 39 // Marked as pin A4 on the board
 
 ////////////// Wifi variables //////////////
 // Wifi address
@@ -110,13 +113,18 @@ char msg_buffer[100];
 bool send_location_msg();
 bool sendWhatsappMessage(String);
 void exception_handler(String);
-void tft_print_headline(String);
+void tft_print_headline(String, uint16_t, uint16_t);
+void tft_print_headline(String, uint16_t);
 void tft_print_ok(void);
-void add_to_buffer(CIRCULAR_BUFFER *cb, int value);
-int read_from_buffer(CIRCULAR_BUFFER *cb);
 void update_avg_heart_rate();
 void update_heart_rate();
 void HR_setup();
+void push_button_setup();
+bool push_botton_pressed();
+void send_push_button_alert();
+void send_fall_alert(void);
+void send_hit_alert();
+void send_heart_rate_alert();
 
 ////////////////////// main / loop //////////////////////
 void setup()
@@ -129,14 +137,18 @@ void loop()
 {
   // put your main code here, to run repeatedly:
   main_operational_loop();
+  // accel_test_loop_serial();
 }
 
+///////////////////////////////////////////////////////
 ////////////////////// Functions //////////////////////
+///////////////////////////////////////////////////////
 
-// main algorithm
+///////////////////////////// main algorithm /////////////////////////////
 inline void main_operational_setup(void)
 {
   Serial.begin(9600);
+  push_button_setup();
   HR_setup();
   TFT_setup();
   wifi_setup();
@@ -148,54 +160,25 @@ inline void main_operational_setup(void)
 inline void main_operational_loop(void)
 {
   // get location
-  // get_gps_lat_long();
+  get_gps_lat_long();
 
   // read sensors
   float acc_norm = accel_get_acceleration_norm();
-  // bool HR_calculation_success = calculate_heart_rate();
-  update_avg_heart_rate();
+  bool HR_calculation_success = calculate_heart_rate();
 
   // check free fall condition
   if (acc_norm < ACC_MIN_VALUE)
   {
-    // fall detected
-    tft_print_headline("Fall detected!");
-    tft.setTextColor(ST7735_WHITE);
-    tft.setTextSize(1);
-    tft.printf("sending alarm and current \nlocation\n\n");
-    bool success = send_location_msg();
-
-    if (success == true)
-    {
-      tft.printf("distress message sent!");
-    }
-    else
-    {
-      tft.printf("you're on you own my man!");
-    }
-    delay(2000);
+    send_fall_alert();
+    delay(4000);
     tft_print_ok();
   }
 
   // check hit condition
   if (acc_norm > ACC_MAX_VALUE)
   {
-    // hit detected
-    tft_print_headline("Hit detected!");
-    tft.setTextColor(ST7735_WHITE);
-    tft.setTextSize(1);
-    tft.printf("sending alarm and current \nlocation\n\n");
-    bool success = send_location_msg();
-
-    if (success == true)
-    {
-      tft.printf("distress message sent!");
-    }
-    else
-    {
-      tft.printf("you can do it!");
-    }
-    delay(2000);
+    send_hit_alert();
+    delay(4000);
     tft_print_ok();
   }
 
@@ -203,35 +186,20 @@ inline void main_operational_loop(void)
   if (avg_heart_rate > MAX_HEART_RATE)
   {
     // send alarm
-    tft_print_headline("High HR!");
-    tft.setTextColor(ST7735_WHITE);
-    tft.setTextSize(1);
-    tft.printf("sending alarm and current \nlocation\n\n");
-    bool success = send_location_msg();
-
-    if (success == true)
-    {
-      tft.printf("distress message sent!");
-    }
-    else
-    {
-      tft.printf("too bad!");
-    }
-    delay(2000);
+    send_heart_rate_alert();
+    delay(4000);
     tft_print_ok();
   }
 
-  // if (digitalRead(9) == HIGH)
-  // {
-  //   // https://randomnerdtutorials.com/esp8266-pinout-reference-gpios/
-  //   // need to pull this pin low with 10K resistor and attach to high
-
-  //   // send alarm
-  // }
-  delay(10);
+  if (push_botton_pressed())
+  {
+    send_push_button_alert();
+    delay(4000);
+    tft_print_ok();
+  }
 }
 
-// Heart rate sensor
+///////////////////////////// Heart rate sensor /////////////////////////////
 void HR_setup()
 {
   // setup analog pin
@@ -242,7 +210,8 @@ void HR_setup()
 
   // put one value in buffer
   int heart_rate = calculate_heart_rate();
-  add_to_buffer(&hr_cb, heart_rate);
+
+  return;
 }
 
 int calculate_heart_rate()
@@ -282,47 +251,25 @@ int calculate_heart_rate()
   return heart_rate;
 }
 
-void update_heart_rate()
+void send_heart_rate_alert()
 {
-  int current_heart_rate = calculate_heart_rate();
-  add_to_buffer(&hr_cb, current_heart_rate);
+  tft_print_headline("High HR detected!", ST7735_WHITE, ST7735_INVCTR);
+  tft.setTextColor(ST7735_WHITE);
+  tft.setTextSize(1);
+  tft.printf("sending alarm and current \nlocation\n\n");
+  bool success = send_location_msg();
 
-  return;
-}
-void update_avg_heart_rate()
-{
-  update_heart_rate();
-
-  int sum = 0;
-  for (int i = 0; i < HR_BUFFER_SIZE; i++)
+  if (success == true)
   {
-    sum += calculate_heart_rate();
+    tft.printf("\n\ndistress message sent!");
   }
-  avg_heart_rate = sum / HR_BUFFER_SIZE;
-}
-
-void add_to_buffer(CIRCULAR_BUFFER *cb, int value)
-{
-  cb->buffer[cb->head] = value;
-  cb->head = (cb->head + 1) % cb->buffer_size;
-  if (cb->head == cb->tail)
+  else
   {
-    cb->tail = (cb->tail + 1) % cb->buffer_size; // discard oldest value
+    tft.printf("\n\nGood luck!");
   }
 }
 
-int read_from_buffer(CIRCULAR_BUFFER *cb)
-{
-  if (cb->head == cb->tail)
-  {
-    return -1; // buffer is empty
-  }
-  int value = cb->buffer[cb->tail];
-  cb->tail = (cb->tail + 1) % cb->buffer_size;
-  return value;
-}
-
-// Wifi
+///////////////////////////// Wifi /////////////////////////////
 inline bool wifi_setup(void)
 {
   // establishing wifi connection
@@ -344,7 +291,7 @@ inline bool wifi_setup(void)
     delay(1000);
     tft.print(".");
     count++;
-    if (count >= 20)
+    if (count >= 10)
     {
       exception_handler("can't connect to Wifi");
     }
@@ -362,12 +309,6 @@ inline bool wifi_setup(void)
 bool send_location_msg()
 {
   bool success = false;
-  // tft.fillScreen(ST7735_BLACK);
-  // tft.setCursor(0, 0);
-  // tft.setTextColor(ST7735_WHITE);
-  // tft.setTextSize(1);
-  // tft.printf("Trying to send distress signal");
-
   char msg_buffer[100];
   sprintf(msg_buffer, "Help! here's my location: https://www.google.com/maps/search/?api=1&query=%f,%f", lattitude, longitude);
 
@@ -375,11 +316,8 @@ bool send_location_msg()
 
   if (success)
   {
-    tft.fillScreen(ST7735_BLACK);
-    tft.setCursor(0, 0);
+    tft_print_headline("message sent!", ST7735_GREEN);
     tft.setTextColor(ST7735_WHITE);
-    tft.setTextSize(2);
-    tft.printf("message sent!\n");
     tft.setTextSize(1);
     tft.printf("lat: %f\nlong: %f", lattitude, longitude);
     Serial.printf("lat: %f\nlong: %f", lattitude, longitude);
@@ -389,12 +327,44 @@ bool send_location_msg()
     int tmp = gpsSerial.read();
     delay(GPS_SERIAL_READ_DELAY);
   }
-  delay(1000);
+  delay(1);
 
   return success;
 }
 
-// lcd
+bool sendWhatsappMessage(String message)
+{
+  bool success = false;
+  // Data to send with HTTP POST
+  String url = "http://api.callmebot.com/whatsapp.php?phone=" + phoneNumber + "&apikey=" + apiKey + "&text=" + urlEncode(message);
+  WiFiClient client;
+  HTTPClient http;
+  http.begin(client, url);
+
+  // Specify content-type header
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+
+  // Send HTTP POST request
+  int httpResponseCode = http.POST(url);
+  if (httpResponseCode == 200 || httpResponseCode == 503 || httpResponseCode == -11)
+  {
+    Serial.print("\n\nMessage sent successfully\n");
+    success = true;
+  }
+  else
+  {
+    Serial.println("Error sending the message");
+    Serial.print("HTTP response code: ");
+    Serial.println(httpResponseCode);
+  }
+
+  // Free resources
+  http.end();
+
+  return success;
+}
+
+///////////////////////////// lcd /////////////////////////////
 inline void TFT_setup(void)
 {
   SPI.begin();
@@ -421,11 +391,20 @@ inline void TFT_setup(void)
   delay(250);
 }
 
-void tft_print_headline(String headline)
+void tft_print_headline(String headline, uint16_t txt_color, uint16_t screen_color)
+{
+  tft.fillScreen(screen_color);
+  tft.setTextSize(2);
+  tft.setTextColor(txt_color);
+  tft.setCursor(0, 0);
+  tft.printf("%s\n\n", headline.c_str());
+}
+
+void tft_print_headline(String headline, uint16_t txt_color)
 {
   tft.fillScreen(ST7735_BLACK);
   tft.setTextSize(2);
-  tft.setTextColor(ST7735_MAGENTA);
+  tft.setTextColor(txt_color);
   tft.setCursor(0, 0);
   tft.printf("%s\n\n", headline.c_str());
 }
@@ -442,7 +421,7 @@ void tft_print_ok(void)
   return;
 }
 
-// accelerometer
+///////////////////////////// accelerometer /////////////////////////////
 inline bool accel_setup()
 {
   Wire.begin();
@@ -462,7 +441,7 @@ inline bool accel_setup()
   Serial.printf("min_value: %.2f [m/s^2]\n", sensor_data.min_value);
 
   // print to tft screen
-  tft_print_headline("ADXL345");
+  tft_print_headline("ADXL345", ST7735_MAGENTA);
   tft.setTextColor(ST7735_WHITE);
   tft.setTextSize(1);
   tft.printf("Sensor id: %d\n", sensor_data.sensor_id);
@@ -483,84 +462,91 @@ float accel_get_acceleration_norm()
   sensors_event_t event;
   accel.getEvent(&event);
 
+  float offset = -1.0; // [m/s^2]
+  float acc_norm = sqrt(pow(event.acceleration.x, 2) + pow(event.acceleration.y, 2) + pow(event.acceleration.z, 2));
+  float adj_acc_norm = acc_norm + offset;
+
   // calculate and return acceleration vector norm
-  return (sqrt(pow(event.acceleration.x, 2) + pow(event.acceleration.y, 2) + pow(event.acceleration.z, 2)) - 2);
+  return adj_acc_norm; // found an offset of around 1 m/s^2
 }
 
-bool sendWhatsappMessage(String message)
+void send_fall_alert()
 {
-  bool success = false;
-  // Data to send with HTTP POST
-  String url = "http://api.callmebot.com/whatsapp.php?phone=" + phoneNumber + "&apikey=" + apiKey + "&text=" + urlEncode(message);
-  WiFiClient client;
-  HTTPClient http;
-  http.begin(client, url);
+  tft_print_headline("Fall detected!", ST7735_WHITE, ST7735_INVCTR);
+  tft.setTextColor(ST7735_WHITE);
+  tft.setTextSize(1);
+  tft.printf("sending alarm and current \nlocation\n\n");
+  bool success = send_location_msg();
 
-  // Specify content-type header
-  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-
-  // Send HTTP POST request
-  int httpResponseCode = http.POST(url);
-  if (httpResponseCode == 200 || httpResponseCode == 503 || httpResponseCode == -11)
+  if (success == true)
   {
-    Serial.print("Message sent successfully\n");
-    success = true;
+    tft.printf("\n\ndistress message sent!");
   }
   else
   {
-    Serial.println("Error sending the message");
-    Serial.print("HTTP response code: ");
-    Serial.println(httpResponseCode);
+    tft.printf("\n\nyou're on you own my man!");
   }
-
-  // Free resources
-  http.end();
-
-  return success;
 }
 
-// GPS
+void send_hit_alert()
+{
+  tft_print_headline("Hit detected!", ST7735_WHITE, ST7735_INVCTR);
+  tft.setTextColor(ST7735_WHITE);
+  tft.setTextSize(1);
+  tft.printf("sending alarm and current \nlocation\n\n");
+  bool success = send_location_msg();
+
+  if (success == true)
+  {
+    tft.printf("\n\ndistress message sent!");
+  }
+  else
+  {
+    tft.printf("\n\nGood luck!");
+  }
+}
+
+///////////////////////////// GPS /////////////////////////////
 void gps_setup()
 {
   Serial.println("////////////////////// NEO-6M GPS setup //////////////////////");
   Serial.println("Initiate softwareSerial on pins " + String(GPS_RX_PIN) + " (RX)  and pin" + String(GPS_TX_PIN) + " (TX)");
   gpsSerial.begin(9600);
-  delay(1000);
+  delay(500);
   while (gpsSerial.available())
   {
     Serial.print(gpsSerial.read());
     delay(1);
   }
 
-  Serial.println("\n\nFinished GPS setup");
+  Serial.println("\nFinished GPS setup\n");
 
   // write to TFT screen
-  tft_print_headline("Neo-6m");
+  tft_print_headline("Neo-6m", ST7735_MAGENTA);
   delay(500);
   tft.setTextColor(ST7735_WHITE);
   tft.setTextSize(1);
   tft.printf("Finished GPS setup\n\n");
   tft.printf("getting current location");
 
-  for (int i = 0; i < 5; i++)
+  for (int i = 0; i < 2; i++)
   {
     get_gps_lat_long();
     delay(1000);
-    tft.print(".");
   }
 
   tft.printf("\n\nlat: %.6f \nlong: %.6f\n", lattitude, longitude);
   delay(1000);
 
-  for (int i = 0; i < 3; i++)
-  {
-    tft.print(".");
-    if (send_location_msg())
-    {
-      break;
-    }
-    delay(2000);
-  }
+  // for (int i = 0; i < 3; i++)
+  // {
+  //   tft.print(".");
+  //   if (send_location_msg())
+  //   {
+  //     break;
+  //   }
+  //   delay(2000);
+  // }
 }
 
 void get_gps_raw()
@@ -606,7 +592,36 @@ bool get_gps_lat_long()
   return success;
 }
 
-// test functions
+///////////////////////////// Push button /////////////////////////////
+void push_button_setup()
+{
+  pinMode(PUSH_BUTTON_PIN, INPUT);
+}
+
+bool push_botton_pressed()
+{
+  return digitalRead(PUSH_BUTTON_PIN);
+}
+
+void send_push_button_alert()
+{
+  tft_print_headline("Button Press!", ST7735_WHITE, ST7735_INVCTR);
+  tft.setTextColor(ST7735_WHITE);
+  tft.setTextSize(1);
+  tft.printf("sending alarm and current \nlocation\n\n");
+  bool success = send_location_msg();
+
+  if (success == true)
+  {
+    tft.printf("\n\ndistress message sent!");
+  }
+  else
+  {
+    tft.printf("\n\nyou're on you own my man!");
+  }
+}
+
+///////////////////////////// tests /////////////////////////////
 inline void accel_test_loop()
 {
   // get adxl345 reading
@@ -665,11 +680,11 @@ inline void gps_test_loop()
   {
     // do nothing
   }
-  tft.fillScreen(ST7735_BLACK);
+  // tft.fillScreen(ST7735_BLACK);
   tft.setTextSize(1);
   tft.setCursor(0, 0);
   tft.setTextColor(ST7735_MAGENTA);
-  tft.printf("lat: %.13f \n", lattitude);
+  tft.printf("\n\nlat: %.13f \n", lattitude);
   tft.setTextColor(ST7735_ORANGE);
   tft.printf("long: %.13f \n", longitude);
   char str[100];
@@ -683,10 +698,10 @@ inline void gps_test_loop()
 void exception_handler(String msg)
 {
   tft.fillScreen(ST7735_BLACK);
-  tft.setTextColor(ST7735_RED);
+  tft.setTextColor(ST7735_INVCTR);
   tft.setTextSize(2);
   tft.setCursor(0, 0);
-  tft.printf("Exception!\n");
+  tft.printf("Exception!\n\n");
   tft.setTextColor(ST7735_WHITE);
   tft.setTextSize(1);
   tft.printf("%s\n", msg.c_str());
