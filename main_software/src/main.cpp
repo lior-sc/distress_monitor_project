@@ -1,9 +1,10 @@
 #include <Arduino.h>
 
 // adxl345 libs
+#include <Wire.h>
 #include <Adafruit_I2CDevice.h>
 #include <Adafruit_Sensor.h>
-#include <Wire.h>
+#include <Adafruit_ADXL345_U.h>
 
 // ST7735 tft lcd libs
 #include <Adafruit_ST7735.h>
@@ -29,6 +30,9 @@ Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_A0, TFT_RST);
 
 // Neo-6m variables
 SoftwareSerial gpsSerial(GPS_RX_PIN, GPS_TX_PIN);
+
+// ADXL345 variables
+Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
 
 // put function declarations here:
 int myFunction(int, int);
