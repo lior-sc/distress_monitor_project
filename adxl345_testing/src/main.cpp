@@ -73,7 +73,7 @@ inline bool accel_setup()
    * 1. https://randomnerdtutorials.com/esp32-i2c-communication-arduino-ide/
    * 2. https://randomnerdtutorials.com/esp32-pinout-reference-gpios/
    */
-  Wire.begin(23, 22);
+  Wire.begin();
   // begin accelerometer operation
   bool success = accel.begin();
   // set range to +-16g (+-156.9 m/s)
