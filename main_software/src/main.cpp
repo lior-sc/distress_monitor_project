@@ -37,11 +37,11 @@
 #define ACC_MIN_VALUE 4      // m/s^2
 
 ////////////// Heart rate sensors defines //////////////
-#define HR_SENSOR_PIN 36          // Marked as pin A3 on the board
-#define HR_HIGH_PULSE_READING 550 // 10 bit analog read value
-#define MAX_HEART_RATE 180        // bpm
-#define MIN_HEART_RATE 60         // bpm
-#define HR_BUFFER_SIZE 15
+#define HR_SENSOR_PIN 36           // Marked as pin A3 on the board
+#define HR_HIGH_PULSE_READING 2000 // 12 bit analog read value
+#define MAX_HEART_RATE 180         // bpm
+#define MIN_HEART_RATE 60          // bpm
+#define PRINT_PULSE true           // dictates wether HR will be printed of tft screen
 
 ////////////// Push button defines //////////////
 #define PUSH_BUTTON_PIN 39 // Marked as pin A4 on the board
@@ -58,6 +58,7 @@ String messsage = "Here's the location you requested: https://www.google.com/map
 
 // ST7735 variables
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_A0, TFT_RST);
+bool status_ok = false;
 
 // Neo-6m variables
 SoftwareSerial gpsSerial(GPS_RX_PIN, GPS_TX_PIN);
@@ -70,20 +71,10 @@ Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
 
 // Heart rate variables
 /////////// Heart rate sensor variables
-typedef struct
-{
-  int buffer[100];
-  int buffer_size;
-  int head;
-  int tail;
-
-} CIRCULAR_BUFFER;
-
-CIRCULAR_BUFFER hr_cb;
-
 bool peak_detected = false;
-int avg_heart_rate = 60;
-unsigned long int last_peak_time = 0;
+int heart_rate = 60;
+unsigned long int last_peak_time = 10; // value lager than 0 (so there will be no division by 0)
+bool heart_rate_triggered = false;
 
 ////////////////////////////// Function prototypes //////////////////////////////
 
@@ -92,33 +83,36 @@ inline void TFT_setup(void);
 inline bool accel_setup(void);
 inline bool wifi_setup(void);
 inline void gps_setup(void);
+inline void HR_setup();
 
 // test functions
 inline void accel_test_loop(void);
 inline void accel_test_loop_serial(void);
 inline void heart_rate_test_loop(void);
+inline void calculate_heart_rate_test_loop(void);
+inline void gps_test_loop(void);
 
 // main algorithm functions
 inline void main_operational_setup(void);
 inline void main_operational_loop(void);
 
 // misc functions
-int calculate_heart_rate(void);
+
 float accel_get_acceleration_norm(void);
 void accel_buffer_add_data(float);
 float accel_buffer_get_oldest_data(void);
 void get_gps_raw(void);
 bool get_gps_lat_long(void);
-char msg_buffer[100];
 bool send_location_msg();
 bool sendWhatsappMessage(String);
 void exception_handler(String);
 void tft_print_headline(String, uint16_t, uint16_t);
 void tft_print_headline(String, uint16_t);
 void tft_print_ok(void);
-void update_avg_heart_rate();
-void update_heart_rate();
-void HR_setup();
+bool calculate_heart_rate(void);
+void update_heart_rate(void);
+void print_HR_on_lcd(void);
+
 void push_button_setup();
 bool push_botton_pressed();
 void send_push_button_alert();
@@ -130,14 +124,21 @@ void send_heart_rate_alert();
 void setup()
 {
   // put your setup code here, to run once:
-  main_operational_setup();
+  // main_operational_setup();
+  Serial.begin(9600);
+  push_button_setup();
+  HR_setup();
+  TFT_setup();
+  tft_print_ok();
 }
 
 void loop()
 {
   // put your main code here, to run repeatedly:
-  main_operational_loop();
+  // main_operational_loop();
   // accel_test_loop_serial();
+  // heart_rate_test_loop();
+  calculate_heart_rate();
 }
 
 ///////////////////////////////////////////////////////
@@ -164,7 +165,7 @@ inline void main_operational_loop(void)
 
   // read sensors
   float acc_norm = accel_get_acceleration_norm();
-  bool HR_calculation_success = calculate_heart_rate();
+  calculate_heart_rate();
 
   // check free fall condition
   if (acc_norm < ACC_MIN_VALUE)
@@ -183,7 +184,7 @@ inline void main_operational_loop(void)
   }
 
   // check heart rate condition
-  if (avg_heart_rate > MAX_HEART_RATE)
+  if (heart_rate > MAX_HEART_RATE)
   {
     // send alarm
     send_heart_rate_alert();
@@ -200,42 +201,39 @@ inline void main_operational_loop(void)
 }
 
 ///////////////////////////// Heart rate sensor /////////////////////////////
-void HR_setup()
+inline void HR_setup(void)
 {
   // setup analog pin
   pinMode(HR_SENSOR_PIN, INPUT); // its not harmful although its unnecessary
 
-  // set circular buffer size (<100)
-  hr_cb.buffer_size = HR_BUFFER_SIZE; // size of the buffer we intend to utilize
-
-  // put one value in buffer
   int heart_rate = calculate_heart_rate();
 
   return;
 }
 
-int calculate_heart_rate()
+bool calculate_heart_rate()
 {
   int sensor_value = analogRead(HR_SENSOR_PIN);
   int threshold = HR_HIGH_PULSE_READING;
   int measured_heart_rate = 0;
-  int heart_rate = 0;
+  bool success = false;
 
   if (sensor_value > threshold && !peak_detected)
   {
     /* A peak was detected. conduct calculations*/
 
     // calculte measured heart rate and see that it fits withing specified boundaries
-    measured_heart_rate = 60000 / (int)(millis() - last_peak_time);
+
+    measured_heart_rate = (int)(60000.0 / (double)(millis() - last_peak_time));
 
     if (measured_heart_rate >= MIN_HEART_RATE && measured_heart_rate <= MAX_HEART_RATE)
     {
       heart_rate = measured_heart_rate;
-      // success = true;
+      success = true;
     }
     else
     {
-      // do nothing. heart_rate stays at -1
+      // do nothing. heart rate not updated
     }
 
     // mark peak detection and reset last peak time measurement
@@ -248,11 +246,39 @@ int calculate_heart_rate()
     peak_detected = false;
   }
 
-  return heart_rate;
+  Serial.printf("measured heart rate = % d  heart rate = % d \n",
+                (int)millis(),
+                measured_heart_rate,
+                heart_rate);
+  if (status_ok && success && PRINT_PULSE == true)
+  {
+    print_HR_on_lcd();
+  }
+  return success;
+}
+
+void print_HR_on_lcd()
+{
+  int x_offset = 0;
+  int y_offset = 108;
+
+  tft.setCursor(x_offset, y_offset);
+  tft.setTextSize(2);
+  tft.setTextColor(ST7735_INVCTR);
+  tft.fillRect(x_offset,
+               y_offset - 12,
+               x_offset + 100,
+               y_offset + 12,
+               ST7735_BLACK);
+
+  tft.printf("HR = %d", heart_rate);
+
+  return;
 }
 
 void send_heart_rate_alert()
 {
+  status_ok = false;
   tft_print_headline("High HR detected!", ST7735_WHITE, ST7735_INVCTR);
   tft.setTextColor(ST7735_WHITE);
   tft.setTextSize(1);
@@ -418,6 +444,7 @@ void tft_print_ok(void)
   tft.setTextSize(2);
   tft.printf("Status: OK\n\n");
 
+  status_ok = true;
   return;
 }
 
@@ -472,6 +499,7 @@ float accel_get_acceleration_norm()
 
 void send_fall_alert()
 {
+  status_ok = false;
   tft_print_headline("Fall detected!", ST7735_WHITE, ST7735_INVCTR);
   tft.setTextColor(ST7735_WHITE);
   tft.setTextSize(1);
@@ -490,6 +518,7 @@ void send_fall_alert()
 
 void send_hit_alert()
 {
+  status_ok = false;
   tft_print_headline("Hit detected!", ST7735_WHITE, ST7735_INVCTR);
   tft.setTextColor(ST7735_WHITE);
   tft.setTextSize(1);
@@ -605,6 +634,7 @@ bool push_botton_pressed()
 
 void send_push_button_alert()
 {
+  status_ok = false;
   tft_print_headline("Button Press!", ST7735_WHITE, ST7735_INVCTR);
   tft.setTextColor(ST7735_WHITE);
   tft.setTextSize(1);
@@ -674,6 +704,11 @@ inline void heart_rate_test_loop()
   Serial.println(analogRead(HR_SENSOR_PIN));
 }
 
+inline void calculate_heart_rate_test_loop()
+{
+  Serial.println(calculate_heart_rate());
+}
+
 inline void gps_test_loop()
 {
   while (!get_gps_lat_long())
@@ -697,6 +732,7 @@ inline void gps_test_loop()
 
 void exception_handler(String msg)
 {
+  status_ok = false;
   tft.fillScreen(ST7735_BLACK);
   tft.setTextColor(ST7735_INVCTR);
   tft.setTextSize(2);
