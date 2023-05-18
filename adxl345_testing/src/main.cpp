@@ -12,6 +12,7 @@ Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
 int myFunction(int, int);
 void toggle_led();
 inline bool accel_setup();
+void get_acc();
 
 void setup()
 {
@@ -27,6 +28,7 @@ void loop()
 {
   // put your main code here, to run repeatedly:
   // Serial.println(myFunction(2, 4));
+  get_acc();
   toggle_led();
   delay(100);
 }
