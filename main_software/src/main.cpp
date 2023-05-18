@@ -37,11 +37,14 @@
 #define ACC_MIN_VALUE 4      // m/s^2
 
 ////////////// Heart rate sensors defines //////////////
-#define HR_SENSOR_PIN 36           // Marked as pin A3 on the board
-#define HR_HIGH_PULSE_READING 2000 // 12 bit analog read value
-#define MAX_HEART_RATE 180         // bpm
-#define MIN_HEART_RATE 60          // bpm
-#define PRINT_PULSE true           // dictates wether HR will be printed of tft screen
+#define HR_SENSOR_PIN 36               // Marked as pin A3 on the board
+#define HR_HIGH_PULSE_READING 2000     // 12 bit analog read value
+#define MAX_HEART_RATE 180             // bpm
+#define MIN_HEART_RATE 60              // bpm
+#define HEART_RATE_THRESH 150          // bpm
+#define MAX_HEART_RATE_THREASH_COUNT 5 // how many consecutive times must the thresh be crossed
+#define PRINT_PULSE true               // dictates wether HR will be printed of tft screen
+#define HR_STALE_TIMEOUT 3000
 
 ////////////// Push button defines //////////////
 #define PUSH_BUTTON_PIN 39 // Marked as pin A4 on the board
@@ -74,7 +77,8 @@ Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
 bool peak_detected = false;
 int heart_rate = 60;
 unsigned long int last_peak_time = 10; // value lager than 0 (so there will be no division by 0)
-bool heart_rate_triggered = false;
+unsigned long int last_hr_measurement_time;
+int heart_rate_thresh_count = 0;
 
 ////////////////////////////// Function prototypes //////////////////////////////
 
@@ -103,7 +107,8 @@ void accel_buffer_add_data(float);
 float accel_buffer_get_oldest_data(void);
 void get_gps_raw(void);
 bool get_gps_lat_long(void);
-bool send_location_msg();
+void tft_print_lat_long(void);
+bool send_location_msg(void);
 bool sendWhatsappMessage(String);
 void exception_handler(String);
 void tft_print_headline(String, uint16_t, uint16_t);
@@ -112,6 +117,7 @@ void tft_print_ok(void);
 bool calculate_heart_rate(void);
 void update_heart_rate(void);
 void print_HR_on_lcd(void);
+bool detect_stale_pulse(void);
 
 void push_button_setup();
 bool push_botton_pressed();
@@ -124,21 +130,13 @@ void send_heart_rate_alert();
 void setup()
 {
   // put your setup code here, to run once:
-  // main_operational_setup();
-  Serial.begin(9600);
-  push_button_setup();
-  HR_setup();
-  TFT_setup();
-  tft_print_ok();
+  main_operational_setup();
 }
 
 void loop()
 {
   // put your main code here, to run repeatedly:
-  // main_operational_loop();
-  // accel_test_loop_serial();
-  // heart_rate_test_loop();
-  calculate_heart_rate();
+  main_operational_loop();
 }
 
 ///////////////////////////////////////////////////////
@@ -184,7 +182,7 @@ inline void main_operational_loop(void)
   }
 
   // check heart rate condition
-  if (heart_rate > MAX_HEART_RATE)
+  if (heart_rate > HEART_RATE_THRESH)
   {
     // send alarm
     send_heart_rate_alert();
@@ -230,6 +228,7 @@ bool calculate_heart_rate()
     {
       heart_rate = measured_heart_rate;
       success = true;
+      last_hr_measurement_time = millis();
     }
     else
     {
@@ -246,11 +245,7 @@ bool calculate_heart_rate()
     peak_detected = false;
   }
 
-  Serial.printf("measured heart rate = % d  heart rate = % d \n",
-                (int)millis(),
-                measured_heart_rate,
-                heart_rate);
-  if (status_ok && success && PRINT_PULSE == true)
+  if ((status_ok && success && PRINT_PULSE == true) || detect_stale_pulse())
   {
     print_HR_on_lcd();
   }
@@ -278,7 +273,17 @@ void print_HR_on_lcd()
 
 void send_heart_rate_alert()
 {
+  if (heart_rate_thresh_count < MAX_HEART_RATE_THREASH_COUNT)
+  {
+    heart_rate_thresh_count++;
+    heart_rate = 0;
+    return;
+  }
+
+  heart_rate_thresh_count = 0;
+  heart_rate = 0;
   status_ok = false;
+
   tft_print_headline("High HR detected!", ST7735_WHITE, ST7735_INVCTR);
   tft.setTextColor(ST7735_WHITE);
   tft.setTextSize(1);
@@ -292,6 +297,20 @@ void send_heart_rate_alert()
   else
   {
     tft.printf("\n\nGood luck!");
+  }
+}
+
+bool detect_stale_pulse()
+{
+  if (millis() - last_hr_measurement_time > HR_STALE_TIMEOUT)
+  {
+    last_hr_measurement_time = millis();
+    heart_rate = 0;
+    return true;
+  }
+  else
+  {
+    return false;
   }
 }
 
@@ -616,9 +635,34 @@ bool get_gps_lat_long()
     lattitude = gps.location.lat();
     longitude = gps.location.lng();
 
+    tft_print_lat_long();
+
     success = true;
   }
   return success;
+}
+
+void tft_print_lat_long()
+{
+  if (!status_ok)
+  {
+    return;
+  }
+
+  int x_offset = 0;
+  int y_offset = 36;
+
+  tft.setTextSize(1);
+  tft.setTextColor(ST7735_WHITE);
+  tft.setCursor(x_offset, y_offset);
+  tft.fillRect(x_offset,
+               y_offset,
+               x_offset + 100,
+               y_offset + 24,
+               ST7735_BLACK);
+  tft.printf("lat: %.6f\nlong: %.6f");
+
+  return;
 }
 
 ///////////////////////////// Push button /////////////////////////////
