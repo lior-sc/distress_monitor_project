@@ -15,24 +15,14 @@
 #include <SoftwareSerial.h>
 #include <TinyGPS++.h>
 
-// WiFi
-#include <ESP8266WiFi.h>
-
 // Callmebot
-#include <ESP8266HTTPClient.h>
-#include <WiFiClient.h>
-#include <UrlEncode.h>
-// #include <Callmebot_ESP8266.h>
-
-#define PRINT_VERBOUSE true
-#define PRINT_TFT_SCREEN false
+#include "UrlEncode.h"
+#include "HTTPClient.h"
 
 #define TFT_CS 15 // ESP8266 GPIO NUMBER
 #define TFT_RST 0 // ESP8266 GPIO NUMBER
 #define TFT_DC 2  // ESP8266 GPIO NUMBER
 
-#define PIN_I2C_SCL 22
-#define PIN_I2C_SDA 23
 #define ACCEL_BUFFER_SIZE 10 // circular buffer size. used for filtering
 #define ACC_MAX_VALUE 22     // m/s^2
 #define ACC_MIN_VALUE 4      // m/s^2
@@ -148,9 +138,7 @@ void HR_setup();
 
 void setup()
 {
-  // main_operational_setup();
-  Serial.begin(115200);
-  accel_setup();
+  main_operational_setup();
 }
 
 void loop()
@@ -164,7 +152,7 @@ void loop()
 // main algorithm
 inline void main_operational_setup(void)
 {
-  Serial.begin(115200);
+  Serial.begin(9600);
   HR_setup();
   TFT_setup();
   wifi_setup();
@@ -425,6 +413,7 @@ bool send_location_msg()
 // lcd
 inline void TFT_setup(void)
 {
+  SPI.begin();
   tft.initR(INITR_GREENTAB);
   // set
   tft.fillScreen(ST77XX_BLACK);
@@ -472,46 +461,32 @@ void tft_print_ok(void)
 // accelerometer
 inline bool accel_setup()
 {
-  // setup the I2C pins of the ESP32 and begin I2C
-  Wire.begin(23, 22);
-
   // begin accelerometer operation
   bool success = accel.begin();
-
   // set range to +-16g (+-156.9 m/s)
   accel.setRange(ADXL345_RANGE_16_G);
-
   // get and print sensor data on serial
   sensor_t sensor_data;
   accel.getSensor(&sensor_data);
 
-  if (PRINT_VERBOUSE)
-  {
-    // Serial print the accelerometer data
-    Serial.println("\n////////////////////// adxl345 sensor data //////////////////////");
-    Serial.printf("Sensor id: %d", sensor_data.sensor_id);
-    Serial.printf("Resolution: %.3f [m/s^2]\n", sensor_data.resolution);
-    Serial.printf("max_value: %.2f [m/s^2]\n", sensor_data.max_value);
-    Serial.printf("min_value: %.2f [m/s^2]\n", sensor_data.min_value);
-  }
+  // Serial print the accelerometer data
+  Serial.println("\n////////////////////// adxl345 sensor data //////////////////////");
+  Serial.printf("Sensor id: %d", sensor_data.sensor_id);
+  Serial.printf("Resolution: %.3f [m/s^2]\n", sensor_data.resolution);
+  Serial.printf("max_value: %.2f [m/s^2]\n", sensor_data.max_value);
+  Serial.printf("min_value: %.2f [m/s^2]\n", sensor_data.min_value);
 
-  if (PRINT_TFT_SCREEN)
-  {
-    // print to tft screen
-    tft_print_headline("ADXL345");
-    tft.setTextColor(ST7735_WHITE);
-    tft.setTextSize(1);
-    tft.printf("Sensor id: %d\n", sensor_data.sensor_id);
-    tft.printf("Resolution: %.3f [m/s^2]\n", sensor_data.resolution);
-    tft.printf("max_value: %.2f [m/s^2]\n", sensor_data.max_value);
-    tft.printf("min_value: %.2f [m/s^2]\n", sensor_data.min_value);
-  }
+  // print to tft screen
+  tft_print_headline("ADXL345");
+  tft.setTextColor(ST7735_WHITE);
+  tft.setTextSize(1);
+  tft.printf("Sensor id: %d\n", sensor_data.sensor_id);
+  tft.printf("Resolution: %.3f [m/s^2]\n", sensor_data.resolution);
+  tft.printf("max_value: %.2f [m/s^2]\n", sensor_data.max_value);
+  tft.printf("min_value: %.2f [m/s^2]\n", sensor_data.min_value);
 
-  if (PRINT_VERBOUSE || PRINT_TFT_SCREEN)
-  {
-    // set delay to see the data
-    delay(1000);
-  }
+  // set delay to see the data
+  delay(1000);
 
   // return the success of the accel.begin method
   return success;
