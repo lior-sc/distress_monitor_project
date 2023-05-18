@@ -6,7 +6,12 @@
 #include <Wire.h>
 #include <SPI.h>
 
-//
+// Neo-6m libs
+#include <SoftwareSerial.h>
+
+// GPS defines
+#define GPS_RX_PIN 32
+#define GPS_TX_PIN 33
 
 // put function declarations here:
 int myFunction(int, int);
