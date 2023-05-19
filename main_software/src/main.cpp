@@ -51,8 +51,14 @@
 
 ////////////// Wifi variables //////////////
 // Wifi address
-const char *ssid = "Galaxy A53 5G 4C72";
-const char *password = "otkm7250";
+
+// // phone
+// const char *ssid = "Galaxy A53 5G 4C72";
+// const char *password = "otkm7250";
+
+// room
+const char *ssid = "liornet";
+const char *password = "0544988409";
 
 /////////// callmebot variables ///////////
 String phoneNumber = "+972528854006";
@@ -288,6 +294,7 @@ void send_heart_rate_alert()
   tft.setTextColor(ST7735_WHITE);
   tft.setTextSize(1);
   tft.printf("sending alarm and current \nlocation\n\n");
+  delay(2000);
   bool success = send_location_msg();
 
   if (success == true)
@@ -523,6 +530,7 @@ void send_fall_alert()
   tft.setTextColor(ST7735_WHITE);
   tft.setTextSize(1);
   tft.printf("sending alarm and current \nlocation\n\n");
+  delay(2000);
   bool success = send_location_msg();
 
   if (success == true)
@@ -542,6 +550,7 @@ void send_hit_alert()
   tft.setTextColor(ST7735_WHITE);
   tft.setTextSize(1);
   tft.printf("sending alarm and current \nlocation\n\n");
+  delay(2000);
   bool success = send_location_msg();
 
   if (success == true)
@@ -683,6 +692,7 @@ void send_push_button_alert()
   tft.setTextColor(ST7735_WHITE);
   tft.setTextSize(1);
   tft.printf("sending alarm and current \nlocation\n\n");
+  delay(2000);
   bool success = send_location_msg();
 
   if (success == true)
