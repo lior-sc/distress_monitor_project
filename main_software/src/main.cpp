@@ -52,13 +52,9 @@
 ////////////// Wifi variables //////////////
 // Wifi address
 
-// // phone
-// const char *ssid = "Galaxy A53 5G 4C72";
-// const char *password = "otkm7250";
-
-// room
-const char *ssid = "liornet";
-const char *password = "0544988409";
+// phone
+const char *ssid = "Galaxy A53 5G 4C72";
+const char *password = "otkm7250";
 
 /////////// callmebot variables ///////////
 String phoneNumber = "+972528854006";
