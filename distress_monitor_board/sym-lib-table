@@ -1,0 +1,3 @@
+(sym_lib_table
+  (lib (name "distress_monitor_library")(type "KiCad")(uri "${KIPRJMOD}/distress_monitor_library.kicad_sym")(options "")(descr ""))
+)
