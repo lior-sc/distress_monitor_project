@@ -665,7 +665,7 @@ void tft_print_lat_long()
                x_offset + 100,
                y_offset + 24,
                ST7735_BLACK);
-  tft.printf("lat: %.6f\nlong: %.6f");
+  tft.printf("lat: %.6f\nlong: %.6f", lattitude, longitude);
 
   return;
 }
